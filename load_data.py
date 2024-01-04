@@ -114,7 +114,7 @@ def get_volunteer_name(file_path = r"D:\Desktop\NIR spectroscopy\main\Features_S
     name = np.unique(name)
     return name
 
-def get_volunteer_data(file_path = r"D:\Desktop\NIR spectroscopy\main\Features_Selection_Analysis\Alcohol.csv",col_y = 1899,
+def get_volunteer_data(file_path = r"D:\Desktop\NIR spectroscopy\main\Features_Selection_Analysis\Alcohol.csv",col_y:Union[int,list] = 1899,
 col_name = 1902):
     '''获取志愿者的数据
     -------
@@ -173,7 +173,7 @@ def get_feat_index_accroding_wave(wave_range:list,wavelengths = None):
     Parameters:
     ---------
         - wave_range : list 波长范围
-        - wavelengths : ndarray 波长
+        - wavelengths : ndarray 波长 ，支持自己输入波长列表
     ---------
     Returns:
     ---------
@@ -211,3 +211,25 @@ def get_wave_accroding_feat_index(index:Union[list,int],wavelengths = None)->Uni
     for i in range(len(index)):
         wave.append(wavelengths[index[i]])
     return wave
+
+def get_wave_list(file_path = None):
+    """return wavelengths list
+    -------
+    Parameters:
+    ---------
+        - file_path : str, default = None
+    ---------
+    Returns:
+    ---------
+        - wavelengths : list
+            wavelengths
+
+
+
+    """
+    import pandas as pd
+    if file_path is None:
+        wavelengths = pd.read_csv(r"C:\Users\zata\AppData\Local\Programs\Python\Python310\Lib\site-packages\nirapi\Alcohol.csv").columns[:1899].values.astype("float")
+    else:
+        wavelengths = pd.read_csv(file_path).columns.values.astype("float")
+    return wavelengths

@@ -5,12 +5,11 @@ Functions:
     - PCA_LR_SVR_trian_and_eval(X,y,category = "all_samples",processed_X = None) >> None  # PCA+LR+SVR训练和评估
     - RF_LR_SVR_trian_and_eval(X,y,category = "all_samples",processed_X = None) >> None  # RF+LR+SVR训练和评估
     - NO_FS_LR_SVR_train_and_eval(X,y,category = "all_samples",processed_X = None) >> None  # 所有特征的LR+SVR训练和评估
+    - NO_FS_PLSR_train_and_eval(X,y,category = "all_sample",processed_X = None) >> None  # 所有特征的PLSR训练和评估
     - Random_FS_LR_SVR_train_and_eval(X,y,category = "all_samples",processed_X = None,feat_size:Union[int,list] = None,samples_test_size = 0.33,epoch = 100) >> (LR_MAE_for_featsNum,SVR_MAE_for_featsNum)  # 随机选取特征，然后用LR和SVR训练和评估，返回每个特征数下的平均MAE，最大MAE，最小MAE
-    
+    - Random_FS_PLSR_train_and_eval(X,y,category = "all_sample",processed_X = None,feat_size:Union[int,list] = 5,samples_test_size = 0.33,samples_random = True,epoch = 1000,max_MAE = 0.1,min_R2 = 0.5) >> None  # 随机选取特征，然后用PLSr训练和评估，返回每个特征数下的平均MAE，最大MAE，最小MAE,默认n—components = 3
 """
 from typing import Union
-
-
 
 
 def PCA_LR_SVR_trian_and_eval(X,y,category = "all_samples",processed_X = None,feat_ratio = 0.33,samples_test_size = 0.33):
@@ -226,7 +225,9 @@ def RF_LR_SVR_trian_and_eval(X,y,category = "all_samples",processed_X = None,fea
     train_test_scatter(y_train,y_train_pred,y_test,y_test_pred,category= category+" SVR")
     plt.show()
 
-def NO_FS_LR_SVR_train_and_eval(X,y,category = "all_samples",processed_X = None,samples_test_size = 0.33):
+def NO_FS_LR_SVR_train_and_eval(X = None,y = None ,category = "all_samples",processed = None,samples_test_size = 0.33,draw = True,
+                                
+                                ):
     """
     NO_FS+LR+SVR训练和评估,不做特征选择直接评价
     ------
@@ -238,25 +239,28 @@ def NO_FS_LR_SVR_train_and_eval(X,y,category = "all_samples",processed_X = None,
             Expected value
         - category : str
             category name
-        - processed_X : ndarray
-            如果已经对X做了预处理，可以传入预处理后X训练和测试集 processed_X = (X_train,X_test)
+        - processed : ndarray
+            如果已经对X做了划分， processed_X = (X_train,X_test,y_train,y_test)
         - samples_test_size : float
             测试集比例
     ------
     Returns:
     ------
-        - None
+        - if draw == False: (LR_MAE,LR_R2),(SVR_MAE,SVR_R2)
     ------
     modify:
     -------
-        - 2020-11-28 15:00:00
+        - 2023-11-28 15:00:00
             - 修改了画散点图的函数，调整了MAE和R2的显示的位置
+        - 2023-11-30
+            - 增加了参数draw，default = True，是否画图，如果不画图将返回MAE和R2
     """
     # 线性回归模型
     from sklearn.model_selection import train_test_split
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=samples_test_size, random_state=42)
-    if processed_X is not None:
-        X_train,X_test = processed_X
+    if processed is not None:
+        X_train,X_test,y_train,y_test = processed
+    else:
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=samples_test_size, random_state=42)
     
     
     # 线性回归模型
@@ -268,30 +272,40 @@ def NO_FS_LR_SVR_train_and_eval(X,y,category = "all_samples",processed_X = None,
 
 
 
-    
-    # 画散点图
-    import matplotlib.pyplot as plt
-    # 解决中文显示问题
-    plt.rcParams['font.sans-serif'] = ['SimHei']
-    plt.rcParams['axes.unicode_minus'] = False
-    plt.figure(figsize=(15,5))
-    def train_test_scatter(y_train,y_train_pred,y_test,y_test_pred,category = "all_samples"):
-        plt.scatter(y_train,y_train_pred,label='Training set')
-        plt.scatter(y_test,y_test_pred,label='Testing set')
+    if draw:  #2023-11-30
+        # 画散点图
+        import matplotlib.pyplot as plt
+        # 解决中文显示问题
+        plt.rcParams['font.sans-serif'] = ['SimHei']
+        plt.rcParams['axes.unicode_minus'] = False
+        plt.figure(figsize=(15,5))
+        def train_test_scatter(y_train,y_train_pred,y_test,y_test_pred,category = "all_samples"):
+            plt.scatter(y_train,y_train_pred,label='Training set')
+            plt.scatter(y_test,y_test_pred,label='Testing set')
+            from sklearn.metrics import mean_squared_error,mean_absolute_error,r2_score
+            MAE = mean_absolute_error(y_test,y_test_pred)
+            R2 = r2_score(y_test,y_test_pred)
+            plt.xlabel('True Values')
+            plt.ylabel('Predicted Values')
+            plt.plot([min(min(y_test),min(y_train)),max(max(y_train),max(y_test))],[min(min(y_test),min(y_train)),max(max(y_train),max(y_test))],'r-')
+            plt.text(min(y_test),min(y_train),"MAE:{:.5},R2:{:.5}".format(MAE,R2))
+            plt.legend()
+            plt.title(category+" train_test_Scatter")
+
+
+        plt.subplot(1,2,1)
+        train_test_scatter(y_train,y_train_pred,y_test,y_test_pred,category= category+" LR")
+    else:
         from sklearn.metrics import mean_squared_error,mean_absolute_error,r2_score
-        MAE = mean_absolute_error(y_test,y_test_pred)
-        R2 = r2_score(y_test,y_test_pred)
-        plt.xlabel('True Values')
-        plt.ylabel('Predicted Values')
-        plt.plot([min(min(y_test),min(y_train)),max(max(y_train),max(y_test))],[min(min(y_test),min(y_train)),max(max(y_train),max(y_test))],'r-')
-        plt.text(min(y_test_pred),min(y_test_pred),"MAE:{:.5},R2:{:.5}".format(MAE,R2))
-        plt.legend()
-        plt.title(category+" train_test_Scatter")
+        LR_MAE = mean_absolute_error(y_test,y_test_pred)
+        LR_R2 = r2_score(y_test,y_test_pred)
 
 
-    plt.subplot(1,2,1)
-    train_test_scatter(y_train,y_train_pred,y_test,y_test_pred,category= category+" LR")
-    # 非线性回归模型
+
+
+
+
+    # 非线性回归模型SVR
     from sklearn.svm import SVR
     # svr optuna调参
     import optuna
@@ -308,15 +322,92 @@ def NO_FS_LR_SVR_train_and_eval(X,y,category = "all_samples",processed_X = None,
 
     study = optuna.create_study(direction='minimize')
     optuna.logging.disable_default_handler()
-    study.optimize(objective, n_trials=100)
+    study.optimize(objective, n_trials=1000)
     svr = SVR(kernel='rbf', C=study.best_params['C'], gamma=study.best_params['gamma'], epsilon=study.best_params['epsilon'])
     svr.fit(X_train,y_train)
     y_train_pred = svr.predict(X_train)
     y_test_pred = svr.predict(X_test)
-    # 画散点图
-    plt.subplot(1,2,2)
-    train_test_scatter(y_train,y_train_pred,y_test,y_test_pred,category= category+" SVR")
-    plt.show()
+    del study
+
+
+    if draw:  #2023-11-30
+        # 画散点图
+        plt.subplot(1,2,2)
+        train_test_scatter(y_train,y_train_pred,y_test,y_test_pred,category= category+" SVR")
+        plt.show()
+    else:
+        from sklearn.metrics import mean_squared_error,mean_absolute_error,r2_score
+        SVR_MAE = mean_absolute_error(y_test,y_test_pred)
+        SVR_R2 = r2_score(y_test,y_test_pred)
+
+        return (round(LR_MAE,3),round(LR_R2,3)),(round(SVR_MAE,3),round(SVR_R2,3))
+
+def NO_FS_PLSR_train_and_eval(X,y,category = "all_sample",processed_X = None,samples_test_size = 0.33,draw = True,n_components = 10):
+    """
+    NO_FS+PLSR训练和评估,不做特征选择直接评价
+    ------
+    Parameters:
+    ------
+        - X : ndarray
+            NIR spectral data
+        - y : ndarray
+            Expected value
+        - category : str
+            category name   
+        - processed_X : ndarray
+            如果已经对X做了预处理，可以传入预处理后X训练和测试集 processed_X = (X_train,X_test)
+        - samples_test_size : float 
+            测试集比例
+    ------
+    Returns:
+    ------
+        - if draw == False: (PLSR_MAE,PLSR_R2)
+    ------  
+    modify:
+    -------
+        - 2023-12-6 创建函数
+    """
+    ## 训练和评估数据
+    from sklearn.model_selection import train_test_split
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=samples_test_size, random_state=42)
+    if processed_X is not None:
+        X_train,X_test = processed_X
+    
+    # PLSR
+    from sklearn.cross_decomposition import PLSRegression
+    from sklearn.metrics import mean_absolute_error,r2_score
+    plsr  = PLSRegression(n_components=n_components)
+    plsr.fit(X_train,y_train)
+    y_train_pred = plsr.predict(X_train)
+    y_test_pred = plsr.predict(X_test)
+    if draw:  #2023-11-30
+        # 画散点图
+        import matplotlib.pyplot as plt
+        # 解决中文显示问题
+        plt.rcParams['font.sans-serif'] = ['SimHei']
+        plt.rcParams['axes.unicode_minus'] = False
+        plt.figure(figsize=(15,5))
+        def train_test_scatter(y_train,y_train_pred,y_test,y_test_pred,category = "all_samples"):
+            plt.scatter(y_train,y_train_pred,label='Training set')
+            plt.scatter(y_test,y_test_pred,label='Testing set')
+            from sklearn.metrics import mean_squared_error,mean_absolute_error,r2_score
+            MAE = mean_absolute_error(y_test,y_test_pred)
+            R2 = r2_score(y_test,y_test_pred)
+            plt.xlabel('True Values')
+            plt.ylabel('Predicted Values')
+            # plt.plot([0,max(max(y_train),max(y_test))],[0,max(max(y_train),max(y_test))],'r-')
+            plt.plot([0,0.5],[0,0.5],'r-')
+            plt.text(0.1,0.4,"MAE:{:.5},R2:{:.5}".format(MAE,R2))
+            plt.legend()
+            plt.title(category+" train_test_Scatter")
+            plt.show()
+        train_test_scatter(y_train,y_train_pred,y_test,y_test_pred,category= category+" PLSR")
+    else:
+        from sklearn.metrics import mean_squared_error,mean_absolute_error,r2_score
+        PLSR_MAE = mean_absolute_error(y_test,y_test_pred)
+        PLSR_R2 = r2_score(y_test,y_test_pred)
+        
+        return (round(PLSR_MAE,3),round(PLSR_R2,3))
 
 def Random_FS_LR_SVR_train_and_eval(X,y,category = "all_samples",processed_X = None,feat_size:Union[int,list] = None,samples_test_size = 0.33,epoch = 100,svr_trials = 10):
     """随机选取特征，然后用LR和SVR训练和评估，返回每个特征数下的平均MAE，最大MAE，最小MAE
@@ -448,7 +539,230 @@ def Random_FS_LR_SVR_train_and_eval(X,y,category = "all_samples",processed_X = N
     
     return LR_MAE_for_featsNum,SVR_MAE_for_featsNum
 
+def Random_FS_PLSR_train_and_eval(X,
+                                  y,
+                                  category = "all_sample",
+                                  processed_X = None,
+                                  feat_size:Union[int,list] = 5,  # 随机选取多少特征
+                                  samples_test_size = 0.33, # 测试集比例
+                                  samples_random = True, # 样本是否是随机选取的
+                                  epoch = 1000, # 随机选取多少次
+                                  max_MAE = 0.1, # 随机特征选择可以接受的最大MAE
+                                  min_R2 = 0.5 # 随机特征选择可以接受的最小R2
+                                  ):
+    """随机选取特征，然后用PLSr训练和评估，返回每个特征数下的平均MAE，最大MAE，最小MAE,默认n—components = 3
+    也可以传入feat_size = [1,2,3,4,5,6,7,8,9,10]，指定特征数
+    ------
+    Parameters:
+    ------
+        - X : ndarray
+            NIR spectral data
+        - y : ndarray
+            Expected value
+        - category : str
+            category name
+        - processed_X : ndarray
+            如果已经对X做了预处理，可以传入预处理后X训练和测试集 processed_X = (X_train,X_test)
+        - feat_size : int,list
+            特征数
+        - samples_test_size : float
+            测试集比例
+        - samples_random :True
+            样本是否也要随机选取
+        - epoch : int
+            随机选取特征的次数
+        - max_MAE : float
+            随机特征选择可以接受的最大MAE
 
+    ------
+    Returns:
+    ------
+    """
+   # epoch_print 每个epoch是否打印进度
+    
+    epoch_print = False
+    
+    
+    # 随机划分数据集
+    from sklearn.model_selection import train_test_split
+
+    # 样本数据是否随机选取
+    if samples_random:
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=samples_test_size)
+    else:
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=samples_test_size, random_state=42)
+    
+
+    # 如果已经对X做了预处理，可以传入预处理后X训练和测试集 processed_X = (X_train,X_test)
+    import numpy as np
+    if processed_X is not None:
+        X_train,X_test = processed_X
+
+    # 随机特征选择
+    ## 选取的每个特征数下的平均MAE最小，最大MAE √
+    ## 选取的每个特征数下的MAE分布 ×
+    def randomfste(features_num):
+
+
+        plsr_min_MAE = 10000
+        plsr_min_MAE_feats = []
+        plsr_min_MAE_R2 = 0
+
+
+        # 迭代次数
+        for i in range(epoch):
+            # 是否打印进度
+            if epoch_print:
+                print("epoch:{},feat_num:{}".format(i,features_num))
+
+            # 随机选取特征
+            random_features_index = np.random.choice(np.arange(0, 1899), size=features_num, replace=False)
+
+            # plsr模型
+            from sklearn.cross_decomposition import PLSRegression
+            from sklearn.metrics import mean_absolute_error,r2_score
+            n_coms = 3
+            if features_num < 3:
+                n_coms = features_num
+            plsr  = PLSRegression(n_components=n_coms)
+            plsr.fit(X_train[:,random_features_index],y_train)
+            y_test_pred = plsr.predict(X_test[:,random_features_index])
+            MAE = mean_absolute_error(y_test,y_test_pred)
+            R2 = r2_score(y_test,y_test_pred)
+
+            if MAE <= plsr_min_MAE and R2>=min_R2:
+                plsr_min_MAE = MAE
+                plsr_min_MAE_feats = random_features_index
+                plsr_min_MAE_R2 = R2
+        return plsr_min_MAE,plsr_min_MAE_R2,plsr_min_MAE_feats
+    if isinstance(feat_size,int):
+        return randomfste(feat_size)
+    else :
+        plsr_min_MAE = []
+        plsr_min_MAE_R2 = []
+        plsr_min_MAE_feats = []
+        output = {}
+        
+        for i in feat_size:
+            # print("feat_size",i)
+            MAE,R2,feats = randomfste(i)
+            output[i] =[MAE,R2,feats]
+            # plsr_min_MAE.append(MAE)
+            # plsr_min_MAE_R2.append(R2)
+            # plsr_min_MAE_feats.append(feats)
+        return output
+        
+def Random_FS_RFR_train_and_eval(X,
+                                  y,
+                                  category = "all_sample",
+                                  processed_X = None,
+                                  feat_size:Union[int,list] = 5,  # 随机选取多少特征
+                                  samples_test_size = 0.33, # 测试集比例
+                                  samples_random = True, # 样本是否是随机选取的
+                                  epoch = 1000, # 随机选取多少次
+                                  min_R2 = 0.5, # 随机特征选择可以接受的最小R2
+                                  ):
+    """随机选取特征，然后用随机森林回归训练和评估，返回每个特征数下的最小MAE 和R2
+    也可以传入feat_size = [1,2,3,4,5,6,7,8,9,10]，指定特征数
+    ------
+    Parameters:
+    ------
+        - X : ndarray
+            NIR spectral data
+        - y : ndarray
+            Expected value
+        - category : str
+            category name
+        - processed_X : ndarray
+            如果已经对X做了预处理，可以传入预处理后X训练和测试集 processed_X = (X_train,X_test)
+        - feat_size : int,list
+            特征数
+        - samples_test_size : float
+            测试集比例
+        - samples_random :True
+            样本是否也要随机选取
+        - epoch : int
+            随机选取特征的次数
+        - max_MAE : float
+            随机特征选择可以接受的最大MAE
+
+    ------
+    Returns:
+    ------
+    modify:
+    -------
+        - 2023-12-6 创建函数
+    """
+   # epoch_print 每个epoch是否打印进度
+    
+    epoch_print = True
+    
+    
+    # 随机划分数据集
+    from sklearn.model_selection import train_test_split
+
+    # 样本数据是否随机选取
+    if samples_random:
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=samples_test_size)
+    else:
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=samples_test_size, random_state=42)
+    
+
+    # 如果已经对X做了预处理，可以传入预处理后X训练和测试集 processed_X = (X_train,X_test)
+    import numpy as np
+    if processed_X is not None:
+        X_train,X_test = processed_X
+
+    # 随机特征选择
+    ## 选取的每个特征数下的平均MAE最小，最大MAE √
+    ## 选取的每个特征数下的MAE分布 ×
+    def randomfste(features_num):
+
+
+        rfr_min_MAE = 10000
+        rfr_min_MAE_feats = []
+        rfr_min_MAE_R2 = 0
+
+
+        # 迭代次数
+        for i in range(epoch):
+            # 是否打印进度
+            if epoch_print:
+                print("epoch:{},feat_num:{}".format(i,features_num))
+
+            # 随机选取特征
+            random_features_index = np.random.choice(np.arange(0, 1899), size=features_num, replace=False)
+
+            # rfr模型
+            from sklearn.ensemble import RandomForestRegressor
+            from sklearn.metrics import mean_absolute_error,r2_score
+            rfr  = RandomForestRegressor()
+            rfr.fit(X_train[:,random_features_index],y_train)
+            y_test_pred = rfr.predict(X_test[:,random_features_index])
+            MAE = mean_absolute_error(y_test,y_test_pred)
+            R2 = r2_score(y_test,y_test_pred)
+
+            if MAE <= rfr_min_MAE and R2 >= min_R2:
+                rfr_min_MAE = MAE
+                rfr_min_MAE_feats = random_features_index
+                rfr_min_MAE_R2 = R2
+        return rfr_min_MAE,rfr_min_MAE_R2,rfr_min_MAE_feats
+    if isinstance(feat_size,int):
+        return randomfste(feat_size)
+    else :
+        rfr_min_MAE = []
+        rfr_min_MAE_R2 = []
+        rfr_min_MAE_feats = []
+        for i in feat_size:
+            print("feat_size",i)
+            MAE,R2,feats = randomfste(i)
+            rfr_min_MAE.append(MAE)
+            rfr_min_MAE_R2.append(R2)
+            rfr_min_MAE_feats.append(feats)
+        return rfr_min_MAE,rfr_min_MAE_R2,rfr_min_MAE_feats
+        
+   
+            
 
     
     

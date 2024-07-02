@@ -395,7 +395,31 @@ def Transforming_raw_xlsx_data_into_trainable_csv_data(excel_path = "人体血�
 
 
 
+def get_sqlite_file(host = '47.121.138.184',username='root', password='Zata123@',local_path = "/data" ):
+    import pysftp
+    from tqdm import tqdm
+    import os
+    remote_files = ["/sqlite/样机数据库.db", "/sqlite/光谱数据库.db"]
+    local_path = local_path
+    if not os.path.exists(local_path):
+        os.makedirs(local_path)
+
+    # 创建一个 tqdm 进度条
+    with tqdm(total=len(remote_files), desc="Downloading files") as pbar:
+        with pysftp.Connection(host=host, username=username, password=password) as srv:
+            for remote_file in remote_files:
+                local_file = os.path.join(local_path, os.path.basename(remote_file))
+                if os.path.exists(local_file):
+                    continue
+                srv.get(remote_file, local_file, callback=lambda x, y: pbar.update(y))  # 更新进度条
+                pbar.update(1)  # 确保进度条更新正确
+    
+
+
+
+
 
 if __name__ == "__main__":
-    a = get_file_list_include_name(r"D:\Desktop\NIR spectroscopy\main\Features_Selection_Analysis", ".py")
-    print(a)
+    # a = get_file_list_include_name(r"D:\Desktop\NIR spectroscopy\main\Features_Selection_Analysis", ".py")
+    # print(a)
+    get_sqlite_file()

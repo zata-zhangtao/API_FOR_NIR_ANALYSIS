@@ -12,6 +12,7 @@ Functions:
     - get_file_list_include_name : list(str) 根据文件名所包含的字符串，返回文件列表
     - send_email_to_zhangtao() :  给我发邮件
     - Transforming_raw_xlsx_data_into_trainable_csv_data 把原始的采集的数据转成dataframe
+    - download_file_from_server: 从服务器上下载文件
 ---------
 Examples:
 ---------
@@ -23,6 +24,7 @@ Examples:
     - 加载11月7日皮肤水分每个志愿者的数据 data = get_volunteer_data(file_path=r"D:\\Desktop\\NIR spectroscopy\\dataset\\skin_moisture_11_07.csv",col_y=1899,col_name=1900)
     - 根据波长区间，返回对应的索引 get_feat_index_accroding_wave( wave_range:list,wavelengths = None)
     - 根据索引list，返回对应的波长 get_wave_accroding_feat_index(index:list,wavelengths = None)
+    - 根据文件名，返回文件 download_file_from_server(hostname = '47.121.138.184', port = 22, username = 'root',  password = 'Zata123@', remote_files =["/sqlite/样机数据库.db", "/sqlite/光谱数据库.db"], local_path = "./")
 '''
 
 # wavelengths = pd.read_csv(r"C:\Users\zata\AppData\Local\Programs\Python\Python310\Lib\site-packages\nirapi\Alcohol.csv").columns[:1899].values.astype("float")
@@ -395,31 +397,63 @@ def Transforming_raw_xlsx_data_into_trainable_csv_data(excel_path = "人体血�
 
 
 
-def get_sqlite_file(host = '47.121.138.184',username='root', password='Zata123@',local_path = "/data" ):
-    import pysftp
-    from tqdm import tqdm
-    import os
-    remote_files = ["/sqlite/样机数据库.db", "/sqlite/光谱数据库.db"]
-    local_path = local_path
-    if not os.path.exists(local_path):
-        os.makedirs(local_path)
 
-    # 创建一个 tqdm 进度条
-    with tqdm(total=len(remote_files), desc="Downloading files") as pbar:
-        with pysftp.Connection(host=host, username=username, password=password) as srv:
+def download_file_from_server(hostname = '47.121.138.184', port = 22, username = 'root',  password = 'Zata123@', remote_files =["/sqlite/样机数据库.db", "/sqlite/光谱数据库.db"], local_path = "./"):
+    
+    import paramiko
+    import os
+    import sys
+    from tqdm import tqdm
+   # 创建SSH客户端
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+    try:
+        # 连接SSH服务器
+        client.connect(hostname, port=port, username=username, password=password)
+
+        # 打开SFTP会话
+        sftp = client.open_sftp()
+
+        # 下载每个文件并显示进度
+
+        if isinstance(remote_files, list):
             for remote_file in remote_files:
                 local_file = os.path.join(local_path, os.path.basename(remote_file))
-                if os.path.exists(local_file):
-                    continue
-                srv.get(remote_file, local_file, callback=lambda x, y: pbar.update(y))  # 更新进度条
-                pbar.update(1)  # 确保进度条更新正确
-    
+                # 获取远程文件大小
+                remote_file_size = sftp.stat(remote_file).st_size
+
+                # 使用tqdm显示进度条
+                with tqdm(total=remote_file_size, unit='B', unit_scale=True, desc=f'Downloading remote:{remote_file} -> local:{local_file}') as pbar:
+                    def callback(transferred, total):
+                        pbar.update(transferred - pbar.n)
+
+                    sftp.get(remote_file, local_file, callback=callback)
+        elif isinstance(remote_files, str):
+            local_file = os.path.join(local_path, os.path.basename(remote_files))
+            # 获取远程文件大小
+            remote_file_size = sftp.stat(remote_file).st_size
+
+            # 使用tqdm显示进度条
+            with tqdm(total=remote_file_size, unit='B', unit_scale=True, desc=f'Downloading remote:{remote_file} -> local:{local_file}') as pbar:
+                def callback(transferred, total):
+                    pbar.update(transferred - pbar.n)
+
+                sftp.get(remote_file, local_file, callback=callback)
 
 
+        print("\nDownload complete.")
 
+    except Exception as e:
+        print(f"Error: {e}")
+
+    finally:
+        # 关闭SFTP会话和SSH连接
+        sftp.close()
+        client.close()
 
 
 if __name__ == "__main__":
     # a = get_file_list_include_name(r"D:\Desktop\NIR spectroscopy\main\Features_Selection_Analysis", ".py")
     # print(a)
-    get_sqlite_file()
+    download_file_from_server()

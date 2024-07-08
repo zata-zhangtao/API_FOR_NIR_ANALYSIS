@@ -7,9 +7,11 @@ Functions:
     - Sample_spectral_ranking(X,y,class="all_samples"): 画光谱吸收排序图
     - Numerical_distribution(ndarr,class="all_samples",feat_ = None): 画数值分布图
     - RankingMAE_and_Spearman_between_X_and_Y(X,y,class = "all_samples"): 画X和Y之间的排名MAE和spearman相关系数
-    - train_test_scatter(y_train,y_train_pred,y_test,y_test_pred,class = "all_samples"): 画训练集和测试集的散点图
     - Comparison_of_data_before_and_after(before_X,before_y,after_X,after_y,class = "all_samples"): 画数据处理前后的spearman图
-    -     
+    - train_test_scatter(y_train,y_train_pred,y_test,y_test_pred,class = "all_samples"): 画训练集和测试集的散点图
+    - classification_report_plot(y_true,y_pred): 分类任务中画分类报告图
+    - train_and_test_pred_plot(y_train,y_test,y_pred_train,y_pred_test,data_name): 画回归任务中的散点图，用plotly画
+    - 
 ---------
 
 '''
@@ -503,7 +505,33 @@ def Numerical_distribution_V2(ndarr,category:Union[str,list]="all_samples",feat_
 
     fig1.show()
 
-def plt_plot(X,y):
-    import matplotlib.pyplot as plt
-    plt.plot(X, y)
-    plt.show()
+
+def train_and_test_pred_plot(y_train,y_test,y_pred_train,y_pred_test,data_name:str):
+    import plotly.graph_objects as go
+    import numpy as np
+    from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+    from scipy.stats import pearsonr
+
+    # 计算指标
+    pearson_train, _ = pearsonr(y_train, y_pred_train)
+    pearson_test, _ = pearsonr(y_test, y_pred_test)
+    mae_train = mean_absolute_error(y_train, y_pred_train)
+    mae_test = mean_absolute_error(y_test, y_pred_test)
+    rmse_train = np.sqrt(mean_squared_error(y_train, y_pred_train))
+    rmse_test = np.sqrt(mean_squared_error(y_test, y_pred_test))
+    r2_train = r2_score(y_train, y_pred_train)
+    r2_test = r2_score(y_test, y_pred_test)
+
+    # 使用plotly画图
+    title = f'Band {data_name} 波段<br>'\
+            f'Train set: Pearson r={pearson_train:.3f}, MAE={mae_train:.3f}, RMSE={rmse_train:.3f}, R2={r2_train:.3f}<br>' \
+            f'Test set: Pearson r={pearson_test:.3f}, MAE={mae_test:.3f}, RMSE={rmse_test:.3f}, R2={r2_test:.3f}'
+
+    fig = go.Figure()
+    # train data
+    fig.add_trace(go.Scatter(x=y_test, y=y_pred_test, mode='markers', name='Predicted', marker=dict(color='blue')))
+    fig.add_trace(go.Scatter(x=y_train, y=y_pred_train, mode='markers', name='Predicted', marker=dict(color='green')))
+
+    fig.update_layout(xaxis_title='Actual', yaxis_title='Predicted', title=title)
+    fig.add_shape(type="line", x0=min(y_test), y0=min(y_test), x1=max(y_test), y1=max(y_test), line=dict(color="green", width=1))
+    fig.show()

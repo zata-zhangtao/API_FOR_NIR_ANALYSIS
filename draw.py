@@ -500,3 +500,52 @@ def Numerical_distribution_V2(ndarr,category:Union[str,list]="all_samples",feat_
     fig1 = px.bar(df, x='vals', y='counts', color='feats', barmode='group',title=category+" Numerical Distribution Bar")
 
     fig1.show()
+
+
+def classification_report_plot(y_test, y_pred):
+    # 画分类的图
+    from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import pandas as pd
+    acc = accuracy_score(y_test, y_pred)
+    stats_text = "\n\nAccuracy: {:0.3f}".format(acc)
+    fig = plt.figure(figsize=(10, 7))
+    # Making the Confusion Matrix
+    cm = confusion_matrix(y_test, y_pred)
+    sns.heatmap(pd.DataFrame(cm), annot=True, cmap="Blues", fmt='g')
+    plt.title('Validation Set Confusion Matrix' + stats_text, y=1.1)
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    plt.show()
+
+
+def train_and_test_pred_plot(y_train,y_test,y_pred_train,y_pred_test,data_name:str):
+    import plotly.graph_objects as go
+    import numpy as np
+    from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+    from scipy.stats import pearsonr
+
+    # 计算指标
+    pearson_train, _ = pearsonr(y_train, y_pred_train)
+    pearson_test, _ = pearsonr(y_test, y_pred_test)
+    mae_train = mean_absolute_error(y_train, y_pred_train)
+    mae_test = mean_absolute_error(y_test, y_pred_test)
+    rmse_train = np.sqrt(mean_squared_error(y_train, y_pred_train))
+    rmse_test = np.sqrt(mean_squared_error(y_test, y_pred_test))
+    r2_train = r2_score(y_train, y_pred_train)
+    r2_test = r2_score(y_test, y_pred_test)
+
+    # 使用plotly画图
+    title = f'Band {data_name} 波段<br>'\
+            f'Train set: Pearson r={pearson_train:.3f}, MAE={mae_train:.3f}, RMSE={rmse_train:.3f}, R2={r2_train:.3f}<br>' \
+            f'Test set: Pearson r={pearson_test:.3f}, MAE={mae_test:.3f}, RMSE={rmse_test:.3f}, R2={r2_test:.3f}'
+
+    fig = go.Figure()
+    # train data
+    fig.add_trace(go.Scatter(x=y_test, y=y_pred_test, mode='markers', name='Predicted', marker=dict(color='blue')))
+    fig.add_trace(go.Scatter(x=y_train, y=y_pred_train, mode='markers', name='Predicted', marker=dict(color='green')))
+
+    fig.update_layout(xaxis_title='Actual', yaxis_title='Predicted', title=title)
+    fig.add_shape(type="line", x0=min(y_test), y0=min(y_test), x1=max(y_test), y1=max(y_test), line=dict(color="green", width=1))
+    fig.show()

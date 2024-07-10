@@ -11,13 +11,13 @@ Functions:
     - train_test_scatter(y_train,y_train_pred,y_test,y_test_pred,class = "all_samples"): 画训练集和测试集的散点图
     - classification_report_plot(y_true,y_pred): 分类任务中画分类报告图
     - train_and_test_pred_plot(y_train,y_test,y_pred_train,y_pred_test,data_name): 画回归任务中的散点图，用plotly画
-    - 
+    - plot_multiclass_line(X,y): 根据Y的值设置不同颜色画折线图
 ---------
 
 '''
 import pandas as pd
 # wavelengths = pd.read_csv(r"C:\Users\zata\AppData\Local\Programs\Python\Python310\Lib\site-packages\nirapi\Alcohol.csv").columns[:1899].values.astype("float")
-wavelengths = pd.read_csv(r"C:\Users\zata\AppData\Local\Programs\Python\Python310\Lib\site-packages\nirapi\Alcohol.csv").columns[:1899].values.astype("float")
+# wavelengths = pd.read_csv(r"C:\Users\zata\AppData\Local\Programs\Python\Python310\Lib\site-packages\nirapi\Alcohol.csv").columns[:1899].values.astype("float")
 def spectral_absorption(X,y,category="all_samples",wave = None,plt_show = False):
     '''画光谱吸收图
     -------
@@ -61,7 +61,7 @@ def spectral_absorption(X,y,category="all_samples",wave = None,plt_show = False)
         # matplotlib plotting
         plt.figure(figsize=(15,5))
         for i in range(len(absorbance)):
-            plt.plot(wavelengths,absorbance[i,:],label=str(y[i]))
+            plt.plot(None,absorbance[i,:],label=str(y[i]))
         plt.xlabel('Wavelength')
         plt.ylabel('Absorbance')
         plt.legend()
@@ -75,7 +75,7 @@ def spectral_absorption(X,y,category="all_samples",wave = None,plt_show = False)
 
     fig = go.Figure()
     for i in range(len(absorbance)):
-        fig.add_trace(go.Scatter(x=wavelengths, y=absorbance[i,:],name=str(y[i])))
+        fig.add_trace(go.Scatter(x=None, y=absorbance[i,:],name=str(y[i])))
     fig.update_layout(title=category+" Spectra Absorbance Curve",
                         xaxis_title="Wavelength(nm)",
                         yaxis_title="Absorbance")
@@ -110,7 +110,7 @@ def Sample_spectral_ranking(X,y,category="all_samples" ,wave = None):
     # Plotly plotting
     fig = go.Figure()
     for i in range(ranked.shape[0]):
-        fig.add_trace(go.Scatter(x=wavelengths, y=ranked[i,:], name=str(y[i])))
+        fig.add_trace(go.Scatter(x=None, y=ranked[i,:], name=str(y[i])))
     
     fig.update_xaxes(title_text="Wavelength")
     fig.update_yaxes(title_text="Rank")
@@ -491,6 +491,7 @@ def Numerical_distribution_V2(ndarr,category:Union[str,list]="all_samples",feat_
         for i in range(n):
             feat_.append("feat_"+str(i))
     
+    # 画数值分布图
     vals = [] 
     counts = []
     feats = []
@@ -504,6 +505,30 @@ def Numerical_distribution_V2(ndarr,category:Union[str,list]="all_samples",feat_
     fig1 = px.bar(df, x='vals', y='counts', color='feats', barmode='group',title=category+" Numerical Distribution Bar")
 
     fig1.show()
+
+
+
+
+def classification_report_plot(y_test, y_pred,data_name = ""):
+
+    # 画分类的图
+    from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import pandas as pd
+    # 解决中文显示问题
+    plt.rcParams['font.sans-serif'] = ['SimHei']
+    plt.rcParams['axes.unicode_minus'] = False
+    acc = accuracy_score(y_test, y_pred)
+    stats_text = "\n\nAccuracy: {:0.3f}".format(acc)
+    fig = plt.figure(figsize=(10, 7))
+    # Making the Confusion Matrix
+    cm = confusion_matrix(y_test, y_pred)
+    sns.heatmap(pd.DataFrame(cm), annot=True, cmap="Blues", fmt='g')
+    plt.title( data_name + 'Validation Set Confusion Matrix' + stats_text, y=1.1)
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    plt.show()
 
 
 def train_and_test_pred_plot(y_train,y_test,y_pred_train,y_pred_test,data_name:str):
@@ -534,4 +559,60 @@ def train_and_test_pred_plot(y_train,y_test,y_pred_train,y_pred_test,data_name:s
 
     fig.update_layout(xaxis_title='Actual', yaxis_title='Predicted', title=title)
     fig.add_shape(type="line", x0=min(y_test), y0=min(y_test), x1=max(y_test), y1=max(y_test), line=dict(color="green", width=1))
+    fig.show()
+    
+
+
+def plot_multiclass_line(X,y):
+    """
+    X : numpy array, shape (n_samples, n_features)
+    y : numpy array, shape (n_samples,)
+    """
+    import plotly.graph_objs as go
+    import numpy as np    
+    import random
+
+    def generate_random_colors(num_colors):
+        colors = []
+        for _ in range(num_colors):
+            # Generate random RGB values
+            red = random.randint(0, 255)
+            green = random.randint(0, 255)
+            blue = random.randint(0, 255)
+            # Format as hexadecimal color code
+            color = "#{:02x}{:02x}{:02x}".format(red, green, blue)
+            colors.append(color)
+        return colors
+
+    # Example usage: generate 10 random colors
+    colors_len = np.unique(y).shape[0]
+    colors = generate_random_colors(colors_len)
+    y_unique = np.unique(y)
+
+    fig = go.Figure()
+    for value in y_unique:
+        indes = np.where(y == value)[0]
+        X_axis = [list(range(X.shape[1]))+[None] for i in indes]
+        
+        all_data=[]
+        for index in indes:
+            all_data.append([ list(X[index, :]) + [None]])
+
+        fig.add_trace(go.Scatter(
+            x=np.array(X_axis).flatten(),
+            y=np.array(all_data).flatten(),
+            mode='lines',
+            name=f'y = {value}',
+            line=dict(color=colors[np.where(y_unique == value)[0][0]])  # 可以自定义颜色
+        ))
+
+    # 更新布局
+    fig.update_layout(
+        title='Line plot of All Samples',
+        xaxis_title='Data Point Index',
+        yaxis_title='Feature Value',
+        legend_title='Samples',
+        showlegend=True  # 添加这一行以显示图例
+    )
+
     fig.show()

@@ -31,6 +31,7 @@ from sklearn.preprocessing import MinMaxScaler
 import optuna
 from scipy.stats import pearsonr
 import matplotlib
+import torch.nn as nn
 # matplotlib.use('TkAgg') 
 
 
@@ -2191,7 +2192,125 @@ def spectral_reconstruction_train(PD_values, Spectra_values, epochs=50, lr=1e-3,
         torch.save(model, save_dir+time_str+'.pth')
 
 
+def convex_optimization_recon_for_MZI(project_name):
+    def recon_core_body_v2(wl_num_rec, PD_mW, Trans_cut, alpha1, flag):
+        a = np.ones(wl_num_rec - 1)
+        gamma1_1 = np.diag(-1 * a, 0)
+        gamma1_1 = np.pad(gamma1_1, ((0, 1), (0, 1)), mode='constant')
+        gamma1_2 = np.diag(a, 1)
+        gamma1 = gamma1_1 + gamma1_2
+        gamma1 = gamma1[:-1, :]
 
+        if flag == 1:
+            alpha1 = alpha1[:-1]
+            # Optimization
+        rec = cp.Variable(wl_num_rec)
+        objective = cp.Minimize(
+            cp.sum_squares(Trans_cut @ rec - PD_mW) + cp.sum_squares(cp.multiply(alpha1, gamma1 @ rec)))
+        constraints = [rec >= 0]
+        prob = cp.Problem(objective, constraints)
+        prob.solve(solver=cp.ECOS, verbose=True)
+
+        rec_abs = rec.value
+        rec_norm = rec_abs / np.linalg.norm(rec_abs, np.inf)
+        rec_norm = normalize(rec_abs.reshape(1, -1), norm='max')
+
+        return rec_abs
+
+    a_band1 = np.zeros(281)
+    a_band1[:63] = np.linspace(1.5, 0.5, 63)
+    a_band1[63:243] = 0.5
+    a_band1[243:] = np.linspace(0.5, 1.5, 38)
+
+    a_band2 = np.zeros(201)
+    a_band2[:39] = np.linspace(0.7, 0.1, 39)
+    a_band2[39:151] = 0.1
+    a_band2[151:181] = np.linspace(0.1, 1.5, 30)
+    a_band2[181:] = np.linspace(1.5, 0.5, 20)
+
+    a_band3 = np.zeros(201)
+    a_band3[:36] = np.linspace(0.7, 0.1, 36)
+    a_band3[36:177] = 0.1
+    a_band3[177:] = np.linspace(0.1, 0.7, 24)
+
+    a_band4 = np.zeros(201)
+    a_band4[:23] = np.linspace(1, 0.2, 23)
+    a_band4[23:184] = 0.2
+    a_band4[184:] = np.linspace(0.2, 1, 17)
+
+    alpha1_meas = [a_band1, a_band2, a_band3, a_band4]  # 四个区间的参数
+    alpha1_source = np.array([0.05, 0.05, 0.05, 0.05])
+    s21_data = loadmat('S21.mat')
+    wl = s21_data['wl'].squeeze()
+
+    S21_main_95_T = s21_data['S21_main_95_T'].T  # (81,2000)
+    S21_main_05_T = s21_data['S21_main_05_T'].T  # (81,2000)
+    S21_2nd_95_T = s21_data['S21_2nd_95_T'].T
+    S21_2nd_05_T = s21_data['S21_2nd_05_T'].T
+
+    band1_nm = np.linspace(1240, 1380, 281)
+    band2_nm = np.linspace(1390, 1490, 201)
+    band3_nm = np.linspace(1500, 1600, 201)
+    band4_nm = np.linspace(1610, 1700, 201)
+
+    # 插值
+    interp_func1 = interp1d(wl, S21_main_95_T)  # 定义一个插值函数。它根据给定的数据点生成一个连续的、可调用的函数，你可以用这个函数来计算任何在原始数据点范围内的点的插值。
+    S21_band1_meas_T = interp_func1(band1_nm)
+    S21_band2_meas_T = interp_func1(band2_nm)
+    interp_func1 = interp1d(wl, S21_2nd_95_T)
+    S21_band3_meas_T = interp_func1(band3_nm)
+    S21_band4_meas_T = interp_func1(band4_nm)
+
+    interp_func2 = interp1d(wl, S21_main_05_T)
+    S21_band1_source_T = interp_func2(band1_nm)
+    S21_band2_source_T = interp_func2(band2_nm)
+    interp_func2 = interp1d(wl, S21_2nd_05_T)
+    S21_band3_source_T = interp_func2(band3_nm)
+    S21_band4_source_T = interp_func2(band4_nm)
+
+    # PD_file_name = 'PD_current_%s.csv' % project_name
+    # PD_path = join(getcwd(), 'PD', PD_file_name)
+
+
+
+
+    LOG_folder_path = join(getcwd(), 'PD_LOG')
+    if not exists(LOG_folder_path):
+        mkdir(LOG_folder_path)
+
+    # 检查PD_current文件是否存在，PD文件夹中最多只能有一个文件
+    if exists(dir_path):
+        start_time = time.time()
+        PD_mW_band1, PD_mW_band2, PD_mW_band3, PD_mW_band4, PD_source_mW_band1, PD_source_mW_band2, PD_source_mW_band3, PD_source_mW_band4 = get_pd()
+        if PD_mW_band1 is None:
+            print("请检查文件是否正确")
+            return
+        t_name = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
+        print("PD文件读取完成，耗时：%s秒" % (time.time() - start_time))
+
+        rec_meas_band1 = recon_core_body_v2(len(band1_nm), PD_mW_band1, S21_band1_meas_T, alpha1_meas[0], 1)
+        rec_meas_band2 = recon_core_body_v2(len(band2_nm), PD_mW_band2, S21_band2_meas_T, alpha1_meas[1], 1)
+        rec_meas_band3 = recon_core_body_v2(len(band3_nm), PD_mW_band3, S21_band3_meas_T, alpha1_meas[2], 1)
+        rec_meas_band4 = recon_core_body_v2(len(band4_nm), PD_mW_band4, S21_band4_meas_T, alpha1_meas[3], 1)
+
+        rec_source_band1 = recon_core_body_v2(len(band1_nm), PD_source_mW_band1, S21_band1_source_T, alpha1_source[0],
+                                              0)
+        rec_source_band2 = recon_core_body_v2(len(band2_nm), PD_source_mW_band2, S21_band2_source_T, alpha1_source[1],
+                                              0)
+        rec_source_band3 = recon_core_body_v2(len(band3_nm), PD_source_mW_band3, S21_band3_source_T, alpha1_source[2],
+                                              0)
+        rec_source_band4 = recon_core_body_v2(len(band4_nm), PD_source_mW_band4, S21_band4_source_T, alpha1_source[3],
+                                              0)
+
+        Recon_band1 = rec_meas_band1
+        Recon_band2 = rec_meas_band2
+        Recon_band3 = rec_meas_band3
+        Recon_band4 = rec_meas_band4
+
+        return np.concatenate([Recon_band1, Recon_band2, Recon_band3, Recon_band4]), np.concatenate(
+            [rec_source_band1, rec_source_band2, rec_source_band3, rec_source_band4])
+    else:
+        return None, None
 
 
 

@@ -12,6 +12,12 @@ Functions:
     - Save_data_to_csv【class】 传入文件名和列,创建一个类，这个类支持输入数据，自动存储到文件中
     - run_optuna 传入数据，自动进行调参， 方法是之前光谱分析streamlit自动化平台上的方法
     - get_pythonFile_functions 传入python文件 返回文件中包含的所有函数字典
+    - run_regression_optuna(data_name,X,y,
+                        model='PLS',split = 'SPXY',test_size = 0.3, n_trials=200,object = None,cv = None,save_dir = None):
+                        传入数据，自动进行调参， 支持SVR,PLS
+    - PD_reduce_noise(PD_samples, PD_noise, ratio=9,base_noise= None):  传入样品和噪声PD,以及基础的噪声数值,样品数据减去PD数据得到减去噪声之后的样品数值
+    - SpectralReconstructor : 用于光谱重建的神经网络类，在spectral_reconstruction_train中被使用
+    - spectral_reconstruction_train(PD_values, Spectra_values, epochs=50, lr=1e-3,save_dir = None):  光谱重建训练
 """
 from nirapi.draw import *
 from typing import Union
@@ -25,7 +31,7 @@ from sklearn.preprocessing import MinMaxScaler
 import optuna
 from scipy.stats import pearsonr
 import matplotlib
-matplotlib.use('TkAgg') 
+# matplotlib.use('TkAgg') 
 
 
 def PCA_LR_SVR_trian_and_eval(X,y,category = "all_samples",processed_X = None,feat_ratio = 0.33,samples_test_size = 0.33):
@@ -793,6 +799,8 @@ def Auto_tuning_with_svr(X=None,y=None,name="auto_tuning",epoch=100,n_trial=200,
     """
     # 循环读取文件并且自动调参
     # y = y.ravel()
+
+    print("太久没有使用，这个文件即将删除")
     while_time = 0
     while while_time < epoch:
         while_time += 1
@@ -966,14 +974,14 @@ def run_optuna(X,y,isReg,chose_n_trails,selected_metric = 'r',save=None,save_nam
     ##################################                     设置调参使用哪些参数               begin     #################################################
     ####################################################################################################################################################
     ## 选择异常值去除的选项
-    selected_outlier = ["不做异常值去除"]
+    selected_outlier = ["mahalanobis"]
     if "selected_outlier" in kw.keys():
         selected_outlier = kw["selected_outlier"]
     # 选择数据拆分的选项
     selected_data_split = [ "custom_train_test_split"]
     if "selected_data_split" in kw.keys():
         selected_data_split = kw["selected_data_split"]
-    data_split_ratio  = 0.33
+    data_split_ratio  = 0.3
 
     #选择预处理的选项
     selected_preprocess = ["不做预处理", "mean_centering", "normalization", "standardization", "poly_detrend", "snv", "savgol", "msc","d1", "d2", "rnv", "move_avg"]
@@ -1353,6 +1361,830 @@ def get_pythonFile_functions(AF):
 
             models[name] = (member, default_params)
     return models
+
+
+
+
+def run_regression_optuna(data_name,X,y,model='PLS',split = 'SPXY',test_size = 0.3, n_trials=200,object = None,cv = None,save_dir = None):
+    
+    
+    ''''
+    -----
+    params:
+    -----
+        data_name: 数据集名称
+        X: 特征数据
+        y: 标签数据
+        model: 选择模型，{"PLS","SVR","RFreg","LR"}
+        split: 选择数据集划分方式，{"SPXY","Random"}
+        n_trials: 选择优化次数
+        object: 选择优化目标，{"R2","MAE","MSE","Pearsonr"}
+        cv: 交叉验证方式,填整数就是k折交叉验证，填None不做交叉验证
+        save_dir: 保存结果的名称
+        
+    -----
+    return:
+    -----
+        模型，数据
+    '''
+    from sklearn.cross_decomposition import PLSRegression
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.ensemble import RandomForestRegressor
+    import numpy as np
+    import optuna
+    import pandas as pd
+    import plotly.graph_objects as go
+    from sklearn.svm import SVR
+    import joblib
+    from sklearn.model_selection import LeaveOneOut, cross_val_score
+    results = []
+    from nirapi.ML_model import custom_train_test_split
+    print("警告：当前函数即将废弃，请使用最新版本 (run_regression_optuna ")
+    
+    
+    if split == 'SPXY':
+        X_train, X_test, y_train, y_test = custom_train_test_split(X, y, test_size, 'SPXY')
+    elif split == "Random":
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
+    else:
+        # raise ValueError("split_name error")
+        # 结束
+        assert False, "split_name error"
+    
+    # 归一化数据
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+
+    X_test_scaled = scaler.transform(X_test)
+    
+    def objective(trial):
+
+        try:
+            if model == 'PLS':
+                n_components = trial.suggest_int('n_components', 1, 600)
+                regressor = PLSRegression(n_components=n_components)
+            elif model == 'SVR':
+                C = trial.suggest_float('C', 1e-3, 1e3,log=True)
+                gamma = trial.suggest_float('gamma', 1e-3, 1e3,log=True)
+                regressor = SVR(C=C, gamma=gamma)
+            elif model == 'RFreg':
+                n_estimators = trial.suggest_int('n_estimators', 50, 200)
+                max_depth = trial.suggest_int('max_depth', 5, 30)
+                max_features = trial.suggest_float('max_features', 0.0, 1.0)
+                min_samples_split = trial.suggest_int('min_samples_split', 2, 20)
+                min_samples_leaf = trial.suggest_int('min_samples_leaf', 1, 10)
+                bootstrap = trial.suggest_categorical('bootstrap', [True, False])
+                oob_score = trial.suggest_categorical('oob_score', [True, False])
+                random_state = trial.suggest_int('random_state', 0, 100)
+                regressor = RandomForestRegressor(
+                    n_estimators=n_estimators,
+                    max_depth=max_depth,
+                    max_features=max_features,
+                    min_samples_split=min_samples_split,
+                    min_samples_leaf=min_samples_leaf,
+                    bootstrap=bootstrap,
+                    oob_score=oob_score,
+                    random_state=random_state
+                )
+            elif model == 'LR':
+                regressor = LinearRegression()
+            # elif model == 'XGB':
+            #     from xgboost import XGBRegressor
+                
+            else:
+                # raise ValueError("model_name error")
+                assert False, "model_name error"
+
+
+            if cv is not None:
+                if object == 'RMSE':
+                    score = cross_val_score(regressor, X_train_scaled, y_train, cv=cv, n_jobs=-1, scoring='neg_root_mean_squared_error')
+                elif object == 'R2':
+                    score = cross_val_score(regressor, X_train_scaled, y_train, cv=cv, n_jobs=-1, scoring='r2')
+                elif object == 'MAE':
+                    score = cross_val_score(regressor, X_train_scaled, y_train, cv=cv, n_jobs=-1, scoring='neg_mean_absolute_error')
+                else:
+                    raise ValueError("object_name error")
+                regressor.fit(X_train_scaled, y_train)
+                y_pred = regressor.predict(X_test_scaled)
+                mae = mean_absolute_error(y_test, y_pred)
+                mse = mean_squared_error(y_test, y_pred)
+                rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+                r2 = r2_score(y_test, y_pred)
+                pearsonr = np.corrcoef(y_test.flatten(), y_pred.flatten())[0, 1]
+                print(f"mae: {mae:.3f}, rmse: {rmse:.3f}, r2: {r2:.3f}, pearsonr: {pearsonr:.3f}")
+                return np.mean(score)
+            else:
+                regressor.fit(X_train_scaled, y_train)
+                y_pred = regressor.predict(X_test_scaled)
+                if object == 'R2':
+                    score = r2_score(y_test, y_pred)
+                elif object == 'MAE':
+                    score = -mean_absolute_error(y_test, y_pred)
+                elif object == 'RMSE':
+                    score = - np.sqrt(mean_squared_error(y_test, y_pred))
+                else:
+                    # raise ValueError("object_name error")
+                    assert False, "object_name error"
+                
+
+                # 当前模型的评估指标
+                mae = mean_absolute_error(y_test, y_pred)
+                rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+                r2 = r2_score(y_test, y_pred)
+                pearsonr = np.corrcoef(y_test.flatten(), y_pred.flatten())[0, 1]
+                print(f"mae: {mae:.3f}, rmse: {rmse:.3f}, r2: {r2:.3f}, pearsonr: {pearsonr:.3f}")
+                return score
+        except ValueError as e:
+            print(e)
+            return -np.inf
+
+    # optuna.logging.set_verbosity(optuna.logging.WARNING)
+    
+    pruner = optuna.pruners.MedianPruner()
+    study = optuna.create_study(direction="maximize", pruner=pruner)
+    
+    if model == 'LR':
+        n_trials = 1 
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=True, n_jobs=1)
+
+    best_params = study.best_params
+    print(f"Best Params for {model} Band {data_name}:", best_params)
+    # 最优的模型
+    regressor_final = None
+    if model == 'PLS':
+        regressor_final = PLSRegression(**best_params)
+    elif model == 'SVR':
+        regressor_final = SVR(**best_params)
+    elif model == 'RFreg':
+        regressor_final = RandomForestRegressor(**best_params)
+    elif model == 'LR':
+        regressor_final = LinearRegression()
+    else:
+        raise ValueError("model_name error")
+
+    regressor_final.fit(X_train_scaled, y_train)
+
+
+
+    y_pred_train = regressor_final.predict(X_train_scaled)
+    y_pred_test = regressor_final.predict(X_test_scaled)
+    mae = mean_absolute_error(y_test, y_pred_test)
+    mse = mean_squared_error(y_test, y_pred_test)
+    rmse = np.sqrt(mean_squared_error(y_test, y_pred_test))
+    r2 = r2_score(y_test, y_pred_test)
+    print(f"mae: {mae:.3f}, rmse: {rmse:.3f}, r2: {r2:.3f}")
+    
+    train_and_test_pred_plot(y_train,y_test,y_pred_train,y_pred_test,data_name=data_name,save_dir=save_dir)
+    
+    # 保存模型和数据
+    joblib.dump(regressor_final, f"{save_dir}/{model}_{data_name}_model.pkl")
+    pd.DataFrame(y_test).to_csv(f"{save_dir}/{model}_{data_name}_y_test.csv",index=False)
+    pd.DataFrame(y_pred_test).to_csv(f"{save_dir}/{model}_{data_name}_y_pred_test.csv",index=False)
+    pd.DataFrame(y_train).to_csv(f"{save_dir}/{model}_{data_name}_y_train.csv",index=False)
+    pd.DataFrame(y_pred_train).to_csv(f"{save_dir}/{model}_{data_name}_y_pred_train.csv",index=False)
+    pd.DataFrame(best_params,index=[0]).to_csv(f"{save_dir}/{model}_{data_name}_best_params.csv",index=False)
+    
+    return regressor_final,[X_train_scaled,X_test_scaled,y_train,y_test,y_pred_train,y_pred_test]
+
+
+
+def run_regression_optuna_v2(data_name,X = None,y=None ,data_splited = None,  model='PLS',split = 'SPXY',test_size = 0.3, n_trials=200,object = None,cv = None,save_dir = None):
+    # 增加功能，支持自定义输入训练测试集  data_splited
+    
+    ''''
+    -----
+    params:
+    -----
+        data_name: 数据集名称
+        X: 特征数据
+        y: 标签数据
+        data_splited: 划分好训练测试数据的字典，{'X_train':X_train,'X_test':X_test,'y_train':y_train,'y_test':y_test}
+        model: 选择模型，{"PLS","SVR","RFreg","LR"}
+        split: 选择数据集划分方式，{"SPXY","Random"}
+        n_trials: 选择优化次数
+        object: 选择优化目标，{"R2","MAE","RMSE","Pearsonr"}
+        cv: 交叉验证方式,填整数就是k折交叉验证，填None不做交叉验证
+        save_dir: 保存结果的名称
+        
+    -----
+    return:
+    -----
+        模型，数据
+    '''
+    print("警告：该函数即将废弃，请使用最新版本 (run_regression_optuna_v3 ")
+    from sklearn.cross_decomposition import PLSRegression
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.ensemble import RandomForestRegressor
+    import numpy as np
+    import optuna
+    import pandas as pd
+    import plotly.graph_objects as go
+    from sklearn.svm import SVR
+    import joblib
+    from sklearn.model_selection import LeaveOneOut, cross_val_score
+    results = []
+    from nirapi.ML_model import custom_train_test_split
+    
+    if data_splited is not None:
+        X_train = data_splited['X_train']
+        X_test = data_splited['X_test']
+        y_train = data_splited['y_train']
+        y_test = data_splited['y_test']
+    elif X is not None and y is not None:
+        if split == 'SPXY':
+            X_train, X_test, y_train, y_test = custom_train_test_split(X, y, test_size, 'SPXY')
+
+        elif split == "Random":
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
+        else:
+            assert False, "split_name error"
+    
+    
+    # 归一化数据
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+
+    X_test_scaled = scaler.transform(X_test)
+    
+    def objective(trial):
+
+        try:
+            if model == 'PLS':
+                n_components = trial.suggest_int('n_components', 1, 600)
+                regressor = PLSRegression(n_components=n_components)
+            elif model == 'SVR':
+                C = trial.suggest_float('C', 1e-3, 1e3,log=True)
+                gamma = trial.suggest_float('gamma', 1e-3, 1e3,log=True)
+                regressor = SVR(C=C, gamma=gamma)
+            elif model == 'RFreg':
+                n_estimators = trial.suggest_int('n_estimators', 50, 200)
+                max_depth = trial.suggest_int('max_depth', 5, 30)
+                max_features = trial.suggest_float('max_features', 0.0, 1.0)
+                min_samples_split = trial.suggest_int('min_samples_split', 2, 20)
+                min_samples_leaf = trial.suggest_int('min_samples_leaf', 1, 10)
+                bootstrap = trial.suggest_categorical('bootstrap', [True, False])
+                oob_score = trial.suggest_categorical('oob_score', [True, False])
+                random_state = trial.suggest_int('random_state', 0, 100)
+                regressor = RandomForestRegressor(
+                    n_estimators=n_estimators,
+                    max_depth=max_depth,
+                    max_features=max_features,
+                    min_samples_split=min_samples_split,
+                    min_samples_leaf=min_samples_leaf,
+                    bootstrap=bootstrap,
+                    oob_score=oob_score,
+                    random_state=random_state
+                )
+            elif model == 'LR':
+                regressor = LinearRegression()
+            # elif model == 'XGB':
+            #     from xgboost import XGBRegressor
+                
+            else:
+                # raise ValueError("model_name error")
+                assert False, "model_name error"
+
+
+            if cv is not None:
+                if object == 'RMSE':
+                    score = cross_val_score(regressor, X_train_scaled, y_train, cv=cv, n_jobs=-1, scoring='neg_root_mean_squared_error')
+                elif object == 'R2':
+                    score = cross_val_score(regressor, X_train_scaled, y_train, cv=cv, n_jobs=-1, scoring='r2')
+                elif object == 'MAE':
+                    score = cross_val_score(regressor, X_train_scaled, y_train, cv=cv, n_jobs=-1, scoring='neg_mean_absolute_error')
+                else:
+                    raise ValueError("object_name error")
+                regressor.fit(X_train_scaled, y_train)
+                y_pred = regressor.predict(X_test_scaled)
+                mae = mean_absolute_error(y_test, y_pred)
+                mse = mean_squared_error(y_test, y_pred)
+                rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+                r2 = r2_score(y_test, y_pred)
+                pearsonr = np.corrcoef(y_test.flatten(), y_pred.flatten())[0, 1]
+                print(f"mae: {mae:.3f}, rmse: {rmse:.3f}, r2: {r2:.3f}, pearsonr: {pearsonr:.3f}")
+                return np.mean(score)
+            else:
+                regressor.fit(X_train_scaled, y_train)
+                y_pred = regressor.predict(X_test_scaled)
+                if object == 'R2':
+                    score = r2_score(y_test, y_pred)
+                elif object == 'MAE':
+                    score = -mean_absolute_error(y_test, y_pred)
+                elif object == 'RMSE':
+                    score = - np.sqrt(mean_squared_error(y_test, y_pred))
+                else:
+                    # raise ValueError("object_name error")
+                    assert False, "object_name error"
+                
+
+                # 当前模型的评估指标
+                mae = mean_absolute_error(y_test, y_pred)
+                rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+                r2 = r2_score(y_test, y_pred)
+                pearsonr = np.corrcoef(y_test.flatten(), y_pred.flatten())[0, 1]
+                print(f"mae: {mae:.3f}, rmse: {rmse:.3f}, r2: {r2:.3f}, pearsonr: {pearsonr:.3f}")
+                return score
+        except ValueError as e:
+            print(e)
+            return -np.inf
+
+    # optuna.logging.set_verbosity(optuna.logging.WARNING)
+    
+    pruner = optuna.pruners.MedianPruner()
+    study = optuna.create_study(direction="maximize", pruner=pruner)
+    
+    if model == 'LR':
+        n_trials = 1 
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=True, n_jobs=1)
+
+    best_params = study.best_params
+    print(f"Best Params for {model} Band {data_name}:", best_params)
+    # 最优的模型
+    regressor_final = None
+    if model == 'PLS':
+        regressor_final = PLSRegression(**best_params)
+    elif model == 'SVR':
+        regressor_final = SVR(**best_params)
+    elif model == 'RFreg':
+        regressor_final = RandomForestRegressor(**best_params)
+    elif model == 'LR':
+        regressor_final = LinearRegression()
+    else:
+        raise ValueError("model_name error")
+
+    regressor_final.fit(X_train_scaled, y_train)
+
+
+
+    y_pred_train = regressor_final.predict(X_train_scaled)
+    y_pred_test = regressor_final.predict(X_test_scaled)
+    mae = mean_absolute_error(y_test, y_pred_test)
+    mse = mean_squared_error(y_test, y_pred_test)
+    rmse = np.sqrt(mean_squared_error(y_test, y_pred_test))
+    r2 = r2_score(y_test, y_pred_test)
+    print(f"mae: {mae:.3f}, rmse: {rmse:.3f}, r2: {r2:.3f}")
+    
+    train_and_test_pred_plot(y_train,y_test,y_pred_train,y_pred_test,data_name=data_name,save_dir=save_dir)
+    
+    # 保存模型和数据
+    joblib.dump(regressor_final, f"{save_dir}/{model}_{data_name}_model.pkl")
+    pd.DataFrame(y_test).to_csv(f"{save_dir}/{model}_{data_name}_y_test.csv",index=False)
+    pd.DataFrame(y_pred_test).to_csv(f"{save_dir}/{model}_{data_name}_y_pred_test.csv",index=False)
+    pd.DataFrame(y_train).to_csv(f"{save_dir}/{model}_{data_name}_y_train.csv",index=False)
+    pd.DataFrame(y_pred_train).to_csv(f"{save_dir}/{model}_{data_name}_y_pred_train.csv",index=False)
+    pd.DataFrame(best_params,index=[0]).to_csv(f"{save_dir}/{model}_{data_name}_best_params.csv",index=False)
+    
+    return regressor_final,[X_train_scaled,X_test_scaled,y_train,y_test,y_pred_train,y_pred_test]
+
+
+
+from tpot import TPOTRegressor
+from sklearn.model_selection import train_test_split
+
+def tpot_auto_tune(X, y, generations=5, population_size=20, cv=5):
+    # 划分训练集和测试集
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    # 初始化TPOTRegressor
+    tpot = TPOTRegressor(generations=generations, population_size=population_size, cv=cv, random_state=42, verbosity=2)
+    
+    # 拟合模型
+    tpot.fit(X_train, y_train)
+    
+    # 评估模型
+    score = tpot.score(X_test, y_test)
+    
+    # 输出最优模型和分数
+    print("最优模型：", tpot.fitted_pipeline_)
+    print("最优分数：", score)
+    
+    # 返回最优模型
+    return tpot.fitted_pipeline_
+
+
+
+def run_regression_optuna_v3(data_name,X = None,y=None ,data_splited = None, model='PLS',split = 'SPXY',test_size = 0.3, n_trials=200,object = None,cv = None,save_dir = None,each_class_mae=False,only_train_and_val_set=False):
+
+    # 新增功能 data_splited 输入训练集验证集和测试集
+
+    '''
+    -----
+    params:
+    -----
+        data_name: 数据集名称
+        X: 特征数据
+        y: 标签数据
+        data_splited: 划分好训练验证测试数据的字典，{'X_train':X_train,'X_val':X_val,'X_test':X_test,'y_train':y_train,'y_val':y_val,'y_test':y_test}
+        model: 选择模型，{"PLS","SVR","RFreg","LR"}
+        split: 选择数据集划分方式，{"SPXY","Random"}
+        n_trials: 选择优化次数
+        object: 选择优化目标，{"R2","MAE","RMSE","Pearsonr"}
+        cv: 交叉验证方式,填整数就是k折交叉验证，填None不做交叉验证
+        save_dir: 保存结果的名称
+        each_class_mae: 是否计算每个类别的mae,画再散点图上
+        
+    -----
+    return:
+
+    '''
+
+    from sklearn.cross_decomposition import PLSRegression
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.ensemble import RandomForestRegressor
+    import numpy as np
+    import optuna
+    import pandas as pd
+    import plotly.graph_objects as go
+    from sklearn.svm import SVR
+    import joblib
+    from sklearn.model_selection import LeaveOneOut, cross_val_score
+    results = []
+    from nirapi.ML_model import custom_train_test_split
+
+    if data_splited is not None:
+        X_train = data_splited['X_train']
+        X_val = data_splited['X_val']
+        X_test = data_splited['X_test']
+        y_train = data_splited['y_train']
+        y_val = data_splited['y_val']
+        y_test = data_splited['y_test']
+
+
+
+    elif X is not None and y is not None and only_train_and_val_set == False:
+        if split == 'SPXY':
+            X_train, X_test, y_train, y_test = custom_train_test_split(X, y, test_size, 'SPXY')
+            X_train, X_val, y_train, y_val = custom_train_test_split(X_train, y_train, 0.3, 'SPXY')
+        elif split == "Random":
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
+            X_train,X_val,y_train,y_val = train_test_split(X_train, y_train, test_size=0.3, random_state=42)
+        else:
+            assert False, "split_name error"
+    elif X is not None and y is not None and only_train_and_val_set == True:
+        if split == 'SPXY':
+            X_train, X_test, y_train, y_test = custom_train_test_split(X, y, test_size, 'SPXY')
+            X_val, y_val = X_test,y_test
+        elif split == "Random":
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
+            X_val, y_val = X_test,y_test
+        else:
+            assert False, "split_name error"
+    
+    
+    
+    # 归一化数据
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_val_scaled = scaler.transform(X_val)
+    X_test_scaled = scaler.transform(X_test)
+    
+    def objective(trial):
+
+        try:
+            if model == 'PLS':
+                n_components = trial.suggest_int('n_components', 1, 600)
+                regressor = PLSRegression(n_components=n_components)
+            elif model == 'SVR':
+                C = trial.suggest_float('C', 1e-3, 1e3,log=True)
+                gamma = trial.suggest_float('gamma', 1e-3, 1e3,log=True)
+                regressor = SVR(C=C, gamma=gamma)
+            elif model == 'RFreg':
+                n_estimators = trial.suggest_int('n_estimators', 50, 200)
+                max_depth = trial.suggest_int('max_depth', 5, 30)
+                max_features = trial.suggest_float('max_features', 0.0, 1.0)
+                min_samples_split = trial.suggest_int('min_samples_split', 2, 20)
+                min_samples_leaf = trial.suggest_int('min_samples_leaf', 1, 10)
+                bootstrap = trial.suggest_categorical('bootstrap', [True, False])
+                oob_score = trial.suggest_categorical('oob_score', [True, False])
+                random_state = trial.suggest_int('random_state', 0, 100)
+                regressor = RandomForestRegressor(
+                    n_estimators=n_estimators,
+                    max_depth=max_depth,
+                    max_features=max_features,
+                    min_samples_split=min_samples_split,
+                    min_samples_leaf=min_samples_leaf,
+                    bootstrap=bootstrap,
+                    oob_score=oob_score,
+                    random_state=random_state
+                )
+            elif model == 'LR':
+                regressor = LinearRegression()
+            # elif model == 'XGB':
+            #     from xgboost import XGBRegressor
+                
+            else:
+                # raise ValueError("model_name error")
+                assert False, "model_name error"
+
+
+            if cv is not None:
+                if object == 'RMSE':
+                    score = cross_val_score(regressor, X_train_scaled, y_train, cv=cv, n_jobs=-1, scoring='neg_root_mean_squared_error')
+                elif object == 'R2':
+                    score = cross_val_score(regressor, X_train_scaled, y_train, cv=cv, n_jobs=-1, scoring='r2')
+                elif object == 'MAE':
+                    score = cross_val_score(regressor, X_train_scaled, y_train, cv=cv, n_jobs=-1, scoring='neg_mean_absolute_error')
+                else:
+                    raise ValueError("object_name error")
+                score =  np.mean(score)
+                
+                # regressor.fit(X_train_scaled, y_train)
+
+
+            else:
+                regressor.fit(X_train_scaled, y_train)
+                y_val_pred = regressor.predict(X_val_scaled)
+                if object == 'R2':
+                    score = r2_score(y_val, y_val_pred)
+                elif object == 'MAE':
+                    score = -mean_absolute_error(y_val, y_val_pred)
+                elif object == 'RMSE':
+                    score = - np.sqrt(mean_squared_error(y_val, y_val_pred))
+                else:
+                    assert False, "object_name error"
+                
+                # 当前模型的评估指标
+                # mae = mean_absolute_error(y_test, y_val_pred)
+                # rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+                # r2 = r2_score(y_test, y_pred)
+                # pearsonr = np.corrcoef(y_test.flatten(), y_pred.flatten())[0, 1]
+                # print(f"mae: {mae:.3f}, rmse: {rmse:.3f}, r2: {r2:.3f}, pearsonr: {pearsonr:.3f}")
+
+            print("final----------------------------------------")
+            y_pred = regressor.predict(X_test_scaled)
+            mae = mean_absolute_error(y_test, y_pred)
+            mse = mean_squared_error(y_test, y_pred)
+            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+            r2 = r2_score(y_test, y_pred)
+            pearsonr = np.corrcoef(y_test.flatten(), y_pred.flatten())[0, 1]
+            print(f"mae: {mae:.3f}, rmse: {rmse:.3f}, r2: {r2:.3f}, pearsonr: {pearsonr:.3f}")
+            return score
+        except ValueError as e:
+            print(e)
+            return -np.inf
+
+    # optuna.logging.set_verbosity(optuna.logging.WARNING)
+    
+    pruner = optuna.pruners.MedianPruner()
+    study = optuna.create_study(direction="maximize", pruner=pruner)
+    
+    if model == 'LR':
+        n_trials = 1
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=True, n_jobs=1)
+
+    best_params = study.best_params
+    print(f"Best Params for {model} Band {data_name}:", best_params)
+    
+    
+    # 最优的模型
+    regressor_final = None
+    if model == 'PLS':
+        regressor_final = PLSRegression(**best_params)
+    elif model == 'SVR':
+        regressor_final = SVR(**best_params)
+    elif model == 'RFreg':
+        regressor_final = RandomForestRegressor(**best_params)
+    elif model == 'LR':
+        regressor_final = LinearRegression()
+    else:
+        raise ValueError("model_name error")
+    
+
+    
+    
+    y_final = y_test
+    X_final = X_test
+    # final_scaler = StandardScaler()
+    # X_train_scaled = final_scaler.fit_transform(X_train)
+    # X_final_scaled = final_scaler.transform(X_final)
+    # X_val_scaled = final_scaler.transform(X_val)
+
+
+
+
+    from sklearn.pipeline import Pipeline
+    regressor_final = Pipeline([
+    ('scaler', StandardScaler()),      # 归一化步骤
+    ('regressor_final',regressor_final)  # PLS回归步骤
+    ])
+
+
+
+    regressor_final.fit(X_train, y_train)
+
+
+
+    y_pred_train = regressor_final.predict(X_train)
+    y_pred_final = regressor_final.predict(X_final)
+    y_pred_val = regressor_final.predict(X_val)
+    mae = mean_absolute_error(y_final, y_pred_final)
+    mse = mean_squared_error(y_final, y_pred_final)
+    rmse = np.sqrt(mean_squared_error(y_final, y_pred_final))
+    r2 = r2_score(y_final, y_pred_final)
+    print(f"mae: {mae:.3f}, rmse: {rmse:.3f}, r2: {r2:.3f}")
+    
+    # 画图
+    print(y_train.shape,y_test.shape,y_pred_train.shape,y_pred_final.shape)
+    content = model+str(best_params)
+    # train_val_and_test_pred_plot(y_train,y_val,y_test,y_pred_train,y_pred_val,y_pred_final,data_name=data_name,save_dir=save_dir,each_class_mae = each_class_mae,content = content)
+    # train_and_test_pred_plot(y_train,y_final,y_pred_train,y_pred_final,data_name=data_name,save_dir=save_dir,each_class_mae = each_class_mae,content = content)
+    info= {}
+    info['y_val_best_value'] = study.best_value
+    info['y_val_best_params'] = study.best_params
+    info['y_train'] = y_train.tolist()
+    info['y_pred_train'] = y_pred_train.tolist()
+    info['y_val'] = y_val.tolist()
+    info['y_pred_val'] = y_pred_val.tolist()
+    info['y_test'] = y_final.tolist()
+    info['y_pred'] = y_pred_final.tolist()
+    info['mae'] = mae
+    info['rmse'] = rmse
+    info['r2'] = r2
+    if save_dir is not None:
+        # # 保存模型和数据
+        joblib.dump(regressor_final, f"{save_dir}/{model}_{data_name}_model.pkl")
+        import json
+        with open(f"{save_dir}/{model}_{data_name}_info.json", 'w') as f:
+            json.dump(info, f)
+        pd.DataFrame(y_test).to_csv(f"{save_dir}/{model}_{data_name}_y_test.csv",index=False)
+        pd.DataFrame(y_pred_final).to_csv(f"{save_dir}/{model}_{data_name}_y_pred_test.csv",index=False)
+        pd.DataFrame(y_train).to_csv(f"{save_dir}/{model}_{data_name}_y_train.csv",index=False)
+        pd.DataFrame(y_pred_train).to_csv(f"{save_dir}/{model}_{data_name}_y_pred_train.csv",index=False)
+        pd.DataFrame(y_val).to_csv(f"{save_dir}/{model}_{data_name}_y_val.csv",index=False)
+        pd.DataFrame(y_pred_val).to_csv(f"{save_dir}/{model}_{data_name}_y_pred_val.csv",index=False)
+        
+    return info
+    
+    # pd.DataFrame(best_params,index=[0]).to_csv(f"{save_dir}/{model}_{data_name}_best_params.csv",index=False)
+    
+    # return regressor_final,[X_train_scaled,X_test_scaled,y_train,y_test,y_pred_train,y_pred_test]
+
+
+
+
+
+
+
+
+
+
+from tpot import TPOTRegressor
+from sklearn.model_selection import train_test_split
+
+def tpot_auto_tune(X, y, generations=5, population_size=20, cv=5):
+    # 划分训练集和测试集
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    # 初始化TPOTRegressor
+    tpot = TPOTRegressor(generations=generations, population_size=population_size, cv=cv, random_state=42, verbosity=2)
+    
+    # 拟合模型
+    tpot.fit(X_train, y_train)
+    
+    # 评估模型
+    score = tpot.score(X_test, y_test)
+    
+    # 输出最优模型和分数
+    print("最优模型：", tpot.fitted_pipeline_)
+    print("最优分数：", score)
+    
+    # 返回最优模型
+    return tpot.fitted_pipeline_
+
+
+
+
+
+
+# 把所有PD减取连续噪声
+def PD_reduce_noise(PD_samples, PD_noise, ratio=9,base_noise= None):
+
+    if base_noise is None:
+        base_noise = np.mean(PD_noise[0])
+    PD_noise_X_mean = np.mean(PD_noise, axis=1)
+    # data_X_mean_diff = data_X_mean[1:] - data_X_mean[:-1]
+    PD_samples_new = np.zeros_like(PD_samples)
+    for i in range(0,len(PD_samples)):
+        PD_samples_new[i,:] = PD_samples[i,:] - (PD_noise_X_mean[i]-base_noise)*ratio
+    return PD_samples_new
+
+
+
+
+
+def spectral_reconstruction_train(PD_values, Spectra_values, epochs=50, lr=1e-3,save_dir = None):
+    
+    '''
+    ------
+    parameters:
+    ------
+        PD_values: 训练数据 PD值
+        Spectra_values: 训练数据 光谱值
+        epochs: 训练轮数
+        lr: 学习率
+        save_dir: 保存模型的路径
+    '''
+
+
+    PD_train = PD_values
+    spectrum = Spectra_values
+    pd_size = PD_train.shape[1]
+    spectrum_size = spectrum.shape[1]
+    # 设定随机种子以确保结果可复现
+
+    def same_seeds(seed):
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
+        np.random.seed(seed)
+        random.seed(seed)
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
+        np.random.seed(seed)
+    # 网络模型
+ 
+    # 数据集加载方法
+    class SpectralDataset(Dataset):
+        def __init__(self, pd_size, spectrum_size):
+
+            self.pd_values = PD_train.astype(np.float32)    
+            self.spectra = spectrum.astype(np.float32)    
+
+        def __len__(self):
+            return len(self.pd_values)
+
+        def __getitem__(self, idx):
+            return self.pd_values[idx], self.spectra[idx]
+
+    # 创建数据集和数据加载器
+    dataset = SpectralDataset( pd_size=pd_size, spectrum_size=spectrum_size)
+    class SkipFirstSampler(Sampler):
+        def __init__(self, data_source):
+            self.data_source = data_source
+
+        def __iter__(self):
+            return iter(range(1, len(self.data_source)))  # 从第二个样本开始迭代
+
+        def __len__(self):
+            return len(self.data_source) 
+    sampler = SkipFirstSampler(dataset)
+    data_loader = DataLoader(dataset,sampler=sampler, batch_size=64)
+
+
+    def train(model, data_loader, epochs=50, lr=1e-3):
+        optimizer = optim.Adam(model.parameters(), lr=lr)
+        criterion = nn.MSELoss()
+
+        for epoch in range(epochs):
+            total_loss = 0
+            for pd_values, spectra in data_loader:
+                optimizer.zero_grad()
+                spectra_reconstructed = model(pd_values)
+                loss = criterion(spectra_reconstructed, spectra)
+                loss.backward()
+                optimizer.step()
+                total_loss += loss.item()
+
+            print(f'Epoch {epoch+1}, Average Loss: {total_loss / len(data_loader)}')
+
+    same_seeds(15)
+    # 模型初始化
+    model = SpectralReconstructor(pd_size=pd_size, spectrum_size=spectrum_size)
+    train(model, data_loader, epochs=50, lr=1e-3)
+    # 测试
+    model.eval()
+    dataset_test = SpectralDataset(pd_size=pd_size, spectrum_size=spectrum_size)
+    x_rec = model(torch.tensor(dataset_test[0][0], dtype=torch.float32))
+
+
+    if save_dir is not None:
+        import matplotlib.pyplot as plt
+        plt.rcParams['font.sans-serif'] = ['NotoSerifCJK-Regular']  # 用来正常显示中文标签
+        plt.plot(x_rec.detach().numpy() , label = "重建光谱")
+        plt.plot(dataset_test[0][1], label = "原始光谱")
+        plt.legend()
+        from datetime import datetime
+        now = datetime.now()
+        str = now.strftime("%Y-%m-%d_%H_%M_%S")
+        #用time模块
+        import time 
+        time_str = time.strftime("%Y-%m-%d_%H_%M_%S", time.localtime())
+        plt.savefig(save_dir+time_str+'_model.png')
+        torch.save(model, save_dir+time_str+'.pth')
+
+
+
+
+
+
 
 
         

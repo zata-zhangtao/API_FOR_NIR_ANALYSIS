@@ -11,13 +11,29 @@ Functions:
     - train_test_scatter(y_train,y_train_pred,y_test,y_test_pred,class = "all_samples"): 画训练集和测试集的散点图
     - classification_report_plot(y_true,y_pred): 分类任务中画分类报告图
     - train_and_test_pred_plot(y_train,y_test,y_pred_train,y_pred_test,data_name): 画回归任务中的散点图，用plotly画
-    - plot_multiclass_line(X,y): 根据Y的值设置不同颜色画折线图
+    - train_val_and_test_pred_plot(y_train,y_val,y_test,y_pred_train,y_pred_val,y_pred_test, data_name="",save_dir=None,each_class_mae=True,content = "")  # 画训练验证测试集
+    - pred_plot(y_test,y_pred_test, data_name="",save_dir=None,each_class_mae=True,content = "") # 画真实值和预测值的散点图
+    - plot_multiclass_line(data_name,X,y,save_dir=None): 根据Y的值设置不同颜色画折线图
+    - plot_correlation_graph(X,y): 画spearman 和 pearson相关系数图
+    - plot_mean(data_name,X_name,y_name, data_X, data_y, scale=True,draw_y=True, save_dir=None) # 画平均值图
+
+---------
+Example:
+---------
+    
+    
+
 ---------
 
 '''
 import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+import matplotlib.pyplot as plt
+import seaborn as sns
 # wavelengths = pd.read_csv(r"C:\Users\zata\AppData\Local\Programs\Python\Python310\Lib\site-packages\nirapi\Alcohol.csv").columns[:1899].values.astype("float")
-# wavelengths = pd.read_csv(r"C:\Users\zata\AppData\Local\Programs\Python\Python310\Lib\site-packages\nirapi\Alcohol.csv").columns[:1899].values.astype("float")
+# wavelengths = pd.read_csv(r"C:\Users\zata\A ppData\Local\Programs\Python\Python310\Lib\site-packages\nirapi\Alcohol.csv").columns[:1899].values.astype("float")
 def spectral_absorption(X,y,category="all_samples",wave = None,plt_show = False):
     '''画光谱吸收图
     -------
@@ -46,7 +62,7 @@ def spectral_absorption(X,y,category="all_samples",wave = None,plt_show = False)
     absorbance = X
 ###### 2023-11-28 增加了Wavelengths参数，可以传入波长数据，如果不传入，就默认加载1899维的波长数据 begin
     if wave is None: 
-        global wavelengths
+        wavelengths = [i for i in range(X.shape[1])]
     else:
         wavelengths = wave
 ###############################3 end
@@ -98,7 +114,7 @@ def Sample_spectral_ranking(X,y,category="all_samples" ,wave = None):
     import plotly.graph_objects as go
     
     if wave is None:
-        global wavelengths
+        wavelengths = [i for i in range(X.shape[1])]
     else:
         wavelengths = wave
 
@@ -197,11 +213,9 @@ def RankingMAE_and_Spearman_between_X_and_Y(X,
     plt.rcParams['font.sans-serif'] = ['SimHei']
     plt.rcParams['axes.unicode_minus'] = False
 
-    if wave is None:
-        global wavelengths
-    else:
-        wavelengths = wave
 
+    if wave is None:
+        wavelengths = [i for i in range(X.shape[1])]
     
     from sklearn.metrics import mean_absolute_error
     import matplotlib.pyplot as plt
@@ -531,7 +545,7 @@ def classification_report_plot(y_test, y_pred,data_name = ""):
     plt.show()
 
 
-def train_and_test_pred_plot(y_train,y_test,y_pred_train,y_pred_test,data_name:str):
+def train_and_test_pred_plot(y_train,y_test,y_pred_train,y_pred_test,data_name="",save_dir=None,each_class_mae=True,content = ""):
     import plotly.graph_objects as go
     import numpy as np
     from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
@@ -546,25 +560,190 @@ def train_and_test_pred_plot(y_train,y_test,y_pred_train,y_pred_test,data_name:s
     rmse_test = np.sqrt(mean_squared_error(y_test, y_pred_test))
     r2_train = r2_score(y_train, y_pred_train)
     r2_test = r2_score(y_test, y_pred_test)
+    
+
+    y_train_mae_dict = {}
+    y_test_mae_dict = {}
+
+    if each_class_mae:
+        for i in np.unique(y_test):
+            
+            indes_train = np.where(y_train == i)[0]
+            indes_test = np.where(y_test == i)[0]
+            y_train_i = y_train[indes_train]
+            y_pred_train_i = y_pred_train[indes_train]
+            y_test_i = y_test[indes_test]
+            y_pred_test_i = y_pred_test[indes_test]
+            
+
+            mae_train_i = mean_absolute_error(y_train_i, y_pred_train_i)
+            mae_test_i = mean_absolute_error(y_test_i, y_pred_test_i)
+            y_train_mae_dict[i] = mae_train_i.round(3)
+            y_test_mae_dict[i] = mae_test_i.round(3) 
+        
+        
+
+
+
 
     # 使用plotly画图
-    title = f'Band {data_name} 波段<br>'\
+    title = f'{data_name}<br>'\
             f'Train set: Pearson r={pearson_train:.3f}, MAE={mae_train:.3f}, RMSE={rmse_train:.3f}, R2={r2_train:.3f}<br>' \
-            f'Test set: Pearson r={pearson_test:.3f}, MAE={mae_test:.3f}, RMSE={rmse_test:.3f}, R2={r2_test:.3f}'
+            f'Test set: Pearson r={pearson_test:.3f}, MAE={mae_test:.3f}, RMSE={rmse_test:.3f}, R2={r2_test:.3f}<br>'
+    if each_class_mae:
+        title += f'Train set: Each class MAE: {y_test_mae_dict}<br>' 
+    if content!= "":
+        title += f'{content}<br>'
+    
 
     fig = go.Figure()
     # train data
-    fig.add_trace(go.Scatter(x=y_test, y=y_pred_test, mode='markers', name='Predicted', marker=dict(color='blue')))
-    fig.add_trace(go.Scatter(x=y_train, y=y_pred_train, mode='markers', name='Predicted', marker=dict(color='green')))
+    fig.add_trace(go.Scatter(x=y_test, y=y_pred_test, mode='markers', name='test set Predicted', marker=dict(color='blue')))
+    fig.add_trace(go.Scatter(x=y_train, y=y_pred_train, mode='markers', name='train set Predicted', marker=dict(color='green')))
 
     fig.update_layout(xaxis_title='Actual', yaxis_title='Predicted', title=title)
     fig.add_shape(type="line", x0=min(y_test), y0=min(y_test), x1=max(y_test), y1=max(y_test), line=dict(color="green", width=1))
-    fig.show()
+    if save_dir is not None:
+        fig.write_image(f'{save_dir}/{data_name}_train_test_pred.png',width=1800, height=1200)
+    else:
+        return 0
+    
+def train_val_and_test_pred_plot(y_train,y_val,y_test,y_pred_train,y_pred_val,y_pred_test, data_name="",save_dir=None,each_class_mae=True,content = ""):
+    import plotly.graph_objects as go
+    import numpy as np
+    from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+    from scipy.stats import pearsonr
+    
+    
+    # 计算指标
+    pearson_train, _ = pearsonr(y_train, y_pred_train)
+    pearson_val, _ = pearsonr(y_val, y_pred_val)
+    pearson_test, _ = pearsonr(y_test, y_pred_test)
+    mae_train = mean_absolute_error(y_train, y_pred_train)
+    mae_val = mean_absolute_error(y_val, y_pred_val)
+    mae_test = mean_absolute_error(y_test, y_pred_test)
+    rmse_train = np.sqrt(mean_squared_error(y_train, y_pred_train))
+    rmse_val = np.sqrt(mean_squared_error(y_val, y_pred_val))
+    rmse_test = np.sqrt(mean_squared_error(y_test, y_pred_test))
+    r2_train = r2_score(y_train, y_pred_train)
+    r2_val = r2_score(y_val, y_pred_val)
+    r2_test = r2_score(y_test, y_pred_test)
+    
+
+    y_train_mae_dict = {}
+    y_val_mae_dict = {}
+    y_test_mae_dict = {}
+
+    if each_class_mae:
+        for i in np.unique(y_test):
+            
+            # indes_train = np.where(y_train == i)[0]
+            # indes_val = np.where(y_val == i)[0]
+            indes_test = np.where(y_test == i)[0]
+            # y_train_i = y_train[indes_train]
+            # y_pred_train_i = y_pred_train[indes_train]
+            # y_val_i = y_val[indes_val]
+            # y_pred_val_i = y_pred_val[indes_val]
+            y_test_i = y_test[indes_test]
+            y_pred_test_i = y_pred_test[indes_test]
+            
+
+            # mae_train_i = mean_absolute_error(y_train_i, y_pred_train_i)
+            # mae_val_i = mean_absolute_error(y_val_i, y_pred_val_i)
+            mae_test_i = mean_absolute_error(y_test_i, y_pred_test_i)
+            # y_train_mae_dict[i] = mae_train_i.round(3)
+            # y_val_mae_dict[i] = mae_val_i.round(3)
+            y_test_mae_dict[i] = mae_test_i.round(3) 
+        
+        
+
+
+
+
+    # 使用plotly画图
+    title = f'{data_name}<br>'\
+            f'Train set: Pearson r={pearson_train:.3f}, MAE={mae_train:.3f}, RMSE={rmse_train:.3f}, R2={r2_train:.3f}<br>' \
+            f'Val set: Pearson r={pearson_val:.3f}, MAE={mae_val:.3f}, RMSE={rmse_val:.3f}, R2={r2_val:.3f}<br>'\
+            f'Test set: Pearson r={pearson_test:.3f}, MAE={mae_test:.3f}, RMSE={rmse_test:.3f}, R2={r2_test:.3f}<br>'
+    if each_class_mae:
+        title += f'Test set: Each class MAE: {y_test_mae_dict}<br>' 
+    if content!= "":
+        title += f'{content}<br>'
+    
+
+    fig = go.Figure()
+    # train data
+    fig.add_trace(go.Scatter(x=y_test, y=y_pred_test, mode='markers', name='test set Predicted', marker=dict(color='blue')))
+    fig.add_trace(go.Scatter(x=y_val, y=y_pred_val, mode='markers', name='val set Predicted', marker=dict(color='orange')))
+    fig.add_trace(go.Scatter(x=y_train, y=y_pred_train, mode='markers', name='train set Predicted', marker=dict(color='green')))
+
+    fig.update_layout(xaxis_title='Actual', yaxis_title='Predicted', title=title)
+    fig.add_shape(type="line", x0=min(y_test), y0=min(y_test), x1=max(y_test), y1=max(y_test), line=dict(color="green", width=1))
+    if save_dir is not None:
+        fig.write_image(f'{save_dir}/{data_name}_train_test_pred.png',width=1800, height=1200)
+    else:
+        fig.show()
+        return 0
+    
+
+def pred_plot(y_test,y_pred_test, data_name="",save_dir=None,each_class_mae=True,content = ""):
+    import plotly.graph_objects as go
+    import numpy as np
+    from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+    from scipy.stats import pearsonr
+    
+    
+    # 计算指标
+
+    pearson_test, _ = pearsonr(y_test, y_pred_test)
+    mae_test = mean_absolute_error(y_test, y_pred_test)
+    rmse_test = np.sqrt(mean_squared_error(y_test, y_pred_test))
+    r2_test = r2_score(y_test, y_pred_test)
     
 
 
-def plot_multiclass_line(X,y):
+    y_test_mae_dict = {}
+
+    if each_class_mae:
+        for i in np.unique(y_test):
+            
+
+            indes_test = np.where(y_test == i)[0]
+            y_test_i = y_test[indes_test]
+            y_pred_test_i = y_pred_test[indes_test]
+            mae_test_i = mean_absolute_error(y_test_i, y_pred_test_i)
+            y_test_mae_dict[i] = mae_test_i.round(3) 
+        
+        
+
+
+
+
+    # 使用plotly画图
+    title = f'{data_name}<br>'\
+            f'Test set: Pearson r={pearson_test:.3f}, MAE={mae_test:.3f}, RMSE={rmse_test:.3f}, R2={r2_test:.3f}<br>'
+    if each_class_mae:
+        title += f'Test set: Each class MAE: {y_test_mae_dict}<br>' 
+    if content!= "":
+        title += f'{content}<br>'
+    
+
+    fig = go.Figure()
+    # train data
+    fig.add_trace(go.Scatter(x=y_test, y=y_pred_test, mode='markers', name='test set Predicted', marker=dict(color='blue')))
+
+    fig.update_layout(xaxis_title='Actual', yaxis_title='Predicted', title=title)
+    fig.add_shape(type="line", x0=min(y_test), y0=min(y_test), x1=max(y_test), y1=max(y_test), line=dict(color="green", width=1))
+    if save_dir is not None:
+        fig.write_image(f'{save_dir}/{data_name}_train_test_pred.png',width=1800, height=1200)
+    else:
+        return 0
+
+
+
+def plot_multiclass_line(data_name,X,y,save_dir=None):
     """
+    data_name : str, 数据集名称
     X : numpy array, shape (n_samples, n_features)
     y : numpy array, shape (n_samples,)
     """
@@ -608,11 +787,96 @@ def plot_multiclass_line(X,y):
 
     # 更新布局
     fig.update_layout(
-        title='Line plot of All Samples',
+        title='Line plot of '+ str(data_name) ,
         xaxis_title='Data Point Index',
         yaxis_title='Feature Value',
         legend_title='Samples',
         showlegend=True  # 添加这一行以显示图例
     )
+    import datetime
+    now = datetime.datetime.now()
+    if save_dir is not None:
+        # fig.write_image(save_dir+data_name+'_multiclass_line.png',width=1800, height=1200)
+        fig.write_image(f'{save_dir}/{data_name}_{now.strftime("%Y-%m-%d_%H-%M-%S")}_multiclass_line.png',width=1800, height=1200)
 
+    else:
+        fig.show()
+
+
+
+
+def plot_correlation_graph(X, Y,save_dir=None):
+    import numpy as np
+    import plotly.graph_objs as go
+    from scipy.stats import pearsonr, spearmanr
+    # 计算皮尔逊相关系数和斯皮尔曼相关系数
+    pearson_corrs = []
+    spearman_corrs = []
+
+    for feature_idx in range(X.shape[1]):
+        pearson_corr, _ = pearsonr(X[:, feature_idx], Y)
+        spearman_corr, _ = spearmanr(X[:, feature_idx], Y)
+        pearson_corrs.append(pearson_corr)
+        spearman_corrs.append(spearman_corr)
+
+    # 准备绘制数据
+    trace_pearson = go.Scatter(
+        x=list(range(X.shape[1])),
+        y=pearson_corrs,
+        mode='lines',
+        name='Pearson Correlation'
+    )
+
+    trace_spearman = go.Scatter(
+        x=list(range(X.shape[1])),
+        y=spearman_corrs,
+        mode='lines',
+        name='Spearman Correlation'
+    )
+
+    data = [trace_pearson, trace_spearman]
+
+    # 设置布局和绘制
+    layout = go.Layout(
+        title='Correlation Coefficients between Features and y',
+        xaxis=dict(title='Feature Index'),
+        yaxis=dict(title='Correlation Coefficient')
+    )
+
+    fig = go.Figure(data=data, layout=layout)
+    if save_dir is not None:
+        fig.write_image(save_dir+'correlation_coefficients.png')
     fig.show()
+
+def plot_mean(data_name,X_name,y_name, data_X, data_y, scale=True,draw_y=True, save_dir=None):
+    data_X_mean = np.mean(data_X, axis=1)
+    if scale:
+        data_X_mean = (data_X_mean-np.min(data_X_mean))/(np.max(data_X_mean)-np.min(data_X_mean))
+        data_y = (data_y-np.min(data_y))/(np.max(data_y)-np.min(data_y))
+
+    fig = go.Figure()
+
+    # 设置不同颜色
+    fig.add_trace(go.Scatter(x=np.arange(len(data_X_mean)),
+                                y=data_X_mean,
+                                mode='lines+markers',
+                                marker=dict(color='blue'),
+                                line=dict(color='blue'),
+                                text=data_y, 
+                                name=X_name))
+    if draw_y:
+        fig.add_trace(go.Scatter(x=np.arange(len(data_X_mean)),
+                                y=data_y,
+                                mode='lines',
+                                name=y_name))
+        # 设置图表布局，包括标题
+    fig.update_layout(
+        title=f"Mean of {data_name}",
+        xaxis_title="X Axis Title",
+        yaxis_title="Y Axis Title"
+    )
+
+    if save_dir is None:
+        fig.show()
+    else:
+        fig.write_image( save_dir+ f'/{data_name}.png',width=1800, height=1200)

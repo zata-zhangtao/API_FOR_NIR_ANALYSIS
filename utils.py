@@ -1937,7 +1937,7 @@ def run_optuna_v3(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=N
                 'cars': [AF.cars, {'n_sample_runs': trial.suggest_int('cars_n_sample_runs', 10, 1000),
                                     'pls_components': trial.suggest_int('cars_pls_components', 1, 20),
                                     'n_cv_folds': trial.suggest_int('cars_n_cv_folds', 1, 10)}],
-                'spa': [AF.spa, {'i_init': trial.suggest_int('spa_i_init', 0, X.shape[1]-1),
+                'spa': [AF.spa, {'i_init': trial.suggest_int('spa_i_init', 0, 100),
                                     'method': trial.suggest_categorical('spa_method', [0, 1]),
                                     'mean_center': trial.suggest_categorical('spa_mean_center', [True, False])}],
                 'corr_coefficient': [AF.corr_coefficient, {'threshold': trial.suggest_float('corr_coefficient_threshold', 0.0, 1.0)}],
@@ -1964,7 +1964,7 @@ def run_optuna_v3(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=N
                                 'gamma': trial.suggest_float("SVR_gamma", 1e-5, 1000, log=True)}],
                 'PLSR': [AF.PLSR, {'n_components': trial.suggest_int('PLSR_n_components', 1, 20),
                                     'scale': trial.suggest_categorical('PLSR_scale', [True, False])}],
-                'Bayes(贝叶斯回归)': [AF.bayes, {'n_iter': trial.suggest_int('Bayes(贝叶斯回归)_n_iter', 1, 100),
+                'Bayes(贝叶斯回归)': [AF.bayes, {
                                                     'tol': trial.suggest_float('Bayes(贝叶斯回归)_tol', 0.0001, 0.1),
                                                     'alpha_1': trial.suggest_float('Bayes(贝叶斯回归)_alpha_1', 0.0001, 0.1),
                                                     'alpha_2': trial.suggest_float('Bayes(贝叶斯回归)_alpha_2', 0.0001, 0.1),
@@ -2102,12 +2102,13 @@ def run_optuna_v3(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=N
         temp_list_to_database[trial.number].append([[selection_summary_5_tab2[5]], [functions_["Model_Selection"][selection_summary_5_tab2[5]][1]]])
         #
 
-        X_new, y_new = functions_["Pretreatment"][selection_summary_5_tab2[0]][0](X, y,
-                                                                                **functions_["Pretreatment"][
-                                                                                    selection_summary_5_tab2[0]][1])
+
         
 
         if splited_data is None:
+            X_new, y_new = functions_["Pretreatment"][selection_summary_5_tab2[0]][0](X, y,
+                                                                                **functions_["Pretreatment"][
+                                                                                    selection_summary_5_tab2[0]][1])
             X_train, X_test, y_train, y_test = functions_["Dataset_Splitting"][selection_summary_5_tab2[2]][0](X_new,
                                                                                                                 y_new,
                                                                                                                 **functions_[
@@ -2117,10 +2118,6 @@ def run_optuna_v3(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=N
                                                                                                                     1])
         else:
             X_train, X_test, y_train, y_test = splited_data
-
-        
-        print("X_train.shape, X_test.shape, y_train.shape, y_test.shape")
-        print(X_train.shape, X_test.shape, y_train.shape, y_test.shape)
 
 
         for func_info in selection_summary_5_tab2[3]:
@@ -2427,7 +2424,7 @@ def run_regression_optuna(data_name,X,y,model='PLS',split = 'SPXY',test_size = 0
                 n_estimators = trial.suggest_int('n_estimators', 50, 200)
                 max_depth = trial.suggest_int('max_depth', 5, 30)
                 max_features = trial.suggest_float('max_features', 0.0, 1.0)
-                min_samples_split = trial.suggest_int('min_samples_split', 2, 20)
+                min_samples_split = trial.suggest_float('min_samples_split', 0, 1.0)
                 min_samples_leaf = trial.suggest_int('min_samples_leaf', 1, 10)
                 bootstrap = trial.suggest_categorical('bootstrap', [True, False])
                 oob_score = trial.suggest_categorical('oob_score', [True, False])
@@ -3760,3 +3757,139 @@ def plot_2d_pca_combined(train_data, val_data, test_data, label_col='label', n_c
 
     # Show the plot
     plt.show()
+
+
+
+def reconForMZI_CVX(PD_list,s21_data_path = 'S21.mat'):
+    '''MZI样机的重建算法，采用凸优化方法，输入为S21数据和PD值列表，输出为重建的S21数据
+    ------
+    parameters:
+    ------
+        s21_data: 输入的S21数据，格式为mat文件的地址
+        PD_list: 输入的PD值列表，格式为csv文件  PD_mW_band1, PD_mW_band2, PD_mW_band3, PD_mW_band4, PD_source_mW_band1, PD_source_mW_band2, PD_source_mW_band3, PD_source_mW_band4 = PD_list
+    ------
+    return: [样品重建光谱、光源重建光谱]
+    ------
+        S21_rec: 重建的S21数据
+    
+    '''
+    import os
+    import numpy as np
+    import scipy.io as sio
+    import matplotlib.pyplot as plt
+    from datetime import datetime
+    from os.path import join, exists
+    from os import getcwd, mkdir
+    from sporco.admm import bpdn
+    import cvxpy as cp
+    from sklearn.preprocessing import normalize
+    from scipy.io import loadmat
+    from scipy.interpolate import interp1d
+    def recon_core_body_v2(wl_num_rec, PD_mW, Trans_cut, alpha1, flag):
+
+        a = np.ones(wl_num_rec - 1)
+        gamma1_1 = np.diag(-1 * a, 0)
+        gamma1_1 = np.pad(gamma1_1, ((0, 1), (0, 1)), mode='constant')
+        gamma1_2 = np.diag(a, 1)
+        gamma1 = gamma1_1 + gamma1_2
+        gamma1 = gamma1[:-1, :]
+
+        if flag == 1:
+            alpha1 = alpha1[:-1]
+            # Optimization
+        rec = cp.Variable(wl_num_rec)
+        objective = cp.Minimize(
+            cp.sum_squares(Trans_cut @ rec - PD_mW) + cp.sum_squares(cp.multiply(alpha1, gamma1 @ rec)))
+        constraints = [rec >= 0]
+        prob = cp.Problem(objective, constraints)
+        prob.solve(solver=cp.ECOS, verbose=False)
+
+        rec_abs = rec.value
+        rec_norm = rec_abs / np.linalg.norm(rec_abs, np.inf)
+        rec_norm = normalize(rec_abs.reshape(1, -1), norm='max')
+
+        return rec_abs
+
+    a_band1 = np.zeros(281)
+    a_band1[:63] = np.linspace(1.5, 0.5, 63)
+    a_band1[63:243] = 0.5
+    a_band1[243:] = np.linspace(0.5, 1.5, 38)
+
+    a_band2 = np.zeros(201)
+    a_band2[:39] = np.linspace(0.7, 0.1, 39)
+    a_band2[39:151] = 0.1
+    a_band2[151:181] = np.linspace(0.1, 1.5, 30)
+    a_band2[181:] = np.linspace(1.5, 0.5, 20)
+
+    a_band3 = np.zeros(201)
+    a_band3[:36] = np.linspace(0.7, 0.1, 36)
+    a_band3[36:177] = 0.1
+    a_band3[177:] = np.linspace(0.1, 0.7, 24)
+
+    a_band4 = np.zeros(201)
+    a_band4[:23] = np.linspace(1, 0.2, 23)
+    a_band4[23:184] = 0.2
+    a_band4[184:] = np.linspace(0.2, 1, 17)
+
+    alpha1_meas = [a_band1, a_band2, a_band3, a_band4]  # 四个区间的参数
+    alpha1_source = np.array([0.05, 0.05, 0.05, 0.05])
+    s21_data = loadmat(s21_data_path)
+    wl = s21_data['wl'].squeeze()
+
+    S21_main_95_T = s21_data['S21_main_95_T'].T  # (81,2000)
+    S21_main_05_T = s21_data['S21_main_05_T'].T  # (81,2000)
+    S21_2nd_95_T = s21_data['S21_2nd_95_T'].T
+    S21_2nd_05_T = s21_data['S21_2nd_05_T'].T
+
+    band1_nm = np.linspace(1240, 1380, 281)
+    band2_nm = np.linspace(1390, 1490, 201)
+    band3_nm = np.linspace(1500, 1600, 201)
+    band4_nm = np.linspace(1610, 1700, 201)
+
+    # 插值
+    interp_func1 = interp1d(wl, S21_main_95_T)  # 定义一个插值函数。它根据给定的数据点生成一个连续的、可调用的函数，你可以用这个函数来计算任何在原始数据点范围内的点的插值。
+    S21_band1_meas_T = interp_func1(band1_nm)
+    S21_band2_meas_T = interp_func1(band2_nm)
+    interp_func1 = interp1d(wl, S21_2nd_95_T)
+    S21_band3_meas_T = interp_func1(band3_nm)
+    S21_band4_meas_T = interp_func1(band4_nm)
+
+    interp_func2 = interp1d(wl, S21_main_05_T)
+    S21_band1_source_T = interp_func2(band1_nm)
+    S21_band2_source_T = interp_func2(band2_nm)
+    interp_func2 = interp1d(wl, S21_2nd_05_T)
+    S21_band3_source_T = interp_func2(band3_nm)
+    S21_band4_source_T = interp_func2(band4_nm)
+
+    # PD_file_name = 'PD_current_%s.csv' % project_name
+    # PD_path = join(getcwd(), 'PD', PD_file_name)
+
+
+    # 检查PD_current文件是否存在，PD文件夹中最多只能有一个文件
+    PD_mW_band1, PD_mW_band2, PD_mW_band3, PD_mW_band4, PD_source_mW_band1, PD_source_mW_band2, PD_source_mW_band3, PD_source_mW_band4 = PD_list
+    if PD_mW_band1 is None:
+        print("请检查文件是否正确")
+        return
+    t_name = datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
+
+    rec_meas_band1 = recon_core_body_v2(len(band1_nm), PD_mW_band1, S21_band1_meas_T, alpha1_meas[0], 1)
+    rec_meas_band2 = recon_core_body_v2(len(band2_nm), PD_mW_band2, S21_band2_meas_T, alpha1_meas[1], 1)
+    rec_meas_band3 = recon_core_body_v2(len(band3_nm), PD_mW_band3, S21_band3_meas_T, alpha1_meas[2], 1)
+    rec_meas_band4 = recon_core_body_v2(len(band4_nm), PD_mW_band4, S21_band4_meas_T, alpha1_meas[3], 1)
+
+    rec_source_band1 = recon_core_body_v2(len(band1_nm), PD_source_mW_band1, S21_band1_source_T, alpha1_source[0],
+                                            0)
+    rec_source_band2 = recon_core_body_v2(len(band2_nm), PD_source_mW_band2, S21_band2_source_T, alpha1_source[1],
+                                            0)
+    rec_source_band3 = recon_core_body_v2(len(band3_nm), PD_source_mW_band3, S21_band3_source_T, alpha1_source[2],
+                                            0)
+    rec_source_band4 = recon_core_body_v2(len(band4_nm), PD_source_mW_band4, S21_band4_source_T, alpha1_source[3],
+                                            0)
+
+    Recon_band1 = rec_meas_band1
+    Recon_band2 = rec_meas_band2
+    Recon_band3 = rec_meas_band3
+    Recon_band4 = rec_meas_band4
+
+    return np.concatenate([Recon_band1, Recon_band2, Recon_band3, Recon_band4]), np.concatenate(
+        [rec_source_band1, rec_source_band2, rec_source_band3, rec_source_band4])

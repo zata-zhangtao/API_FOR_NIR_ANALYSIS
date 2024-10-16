@@ -821,7 +821,7 @@ def PLSR(x_train, x_test, y_train, y_test, n_components=2,scale=True):
 def bayes(x_train, x_test, y_train, y_test, n_iter=300, tol=1.0e-3, alpha_1=1.0e-6, alpha_2=1.0e-6, lambda_1=1.0e-6,
           lambda_2=1.0e-6, compute_score=False, fit_intercept=True):
     from sklearn.linear_model import BayesianRidge
-    bayes = BayesianRidge(n_iter=n_iter, tol=tol, alpha_1=alpha_1, alpha_2=alpha_2, lambda_1=lambda_1,
+    bayes = BayesianRidge(tol=tol, alpha_1=alpha_1, alpha_2=alpha_2, lambda_1=lambda_1,
                           lambda_2=lambda_2,
                           compute_score=compute_score, fit_intercept=fit_intercept)
     bayes.fit(x_train, y_train)

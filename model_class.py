@@ -1,11 +1,47 @@
-from nirapi.preprocessing import SNV
 import optuna
 from sklearn.svm import SVC
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report
-from nirapi.preprocessing import SNV
 from sklearn.base import TransformerMixin, BaseEstimator
+
+
+
+def SNV(X,
+        replace_wave:list = None,
+        ):
+    '''
+    Standard Normal Variate (SNV)
+    --------
+    Parameters:
+    --------
+        X : ndarray like, shape (n_samples, n_features)
+            The data to be processed.
+        replace_wave : list, default = None
+            用其他波段的数据替换掉SNV中原本所有的波段
+    --------
+    Returns:
+    --------
+        X_snv : ndarray like, shape (n_samples, n_features)
+            The data after SNV processing.
+    
+    '''
+    if X.ndim == 1:
+        X = np.array([X])
+    if replace_wave is not None:
+        X_base_line = X[:,replace_wave[0]:replace_wave[1]] * 5
+    else:
+        X_base_line = X
+    x = X
+    x_snv = np.zeros_like(x)
+    # print(X_base_line.shape)
+    # print(X_base_line)
+    for i in range(x.shape[0]):
+        x_snv[i] = (x[i] - np.mean(X_base_line[i])) / np.std(X_base_line[i])
+        # x_snv[i] = (x[i] - np.mean(X_base_line[i]))
+        # print(np.std(X_base_line[i]))
+    
+    return x_snv
 # 自定义转换器类
 class SNVTransformer(BaseEstimator, TransformerMixin):
     def __init__(self):

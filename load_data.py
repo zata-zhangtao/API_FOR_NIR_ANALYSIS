@@ -3,6 +3,7 @@ loading data
 -------
 Functions:
 ---------
+    - datetime_to_timestamp(data_time) :  将日期时间字符串的NumPy数组转换为时间戳（以秒为单位）的NumPy数组
     - split_date_time(date_time, X_train, X_val) : 划分得到数据集的时间戳列表
     - save_model(model, file_name=None) :  保存模型到指定文件
     - load_model(file_name) :  从指定文件加载模型
@@ -24,6 +25,7 @@ Functions:
 ---------
 Examples:
 ---------
+    - 将日期时间字符串的NumPy数组转换为时间戳（以秒为单位）的NumPy数组 datetime_to_timestamp(data_time)
     - 保存模型到指定文件 save_model(model, file_name="model.pkl")
     - 从指定文件加载模型 load_model("model.pkl")
     - 根据时间戳，分割数据集 返回X_train, X_val, X_test, y_train, y_val, y_test = split_data_by_date(X , y , date_time,['2024-09-27 23:59:59', '2024-09-29 23:59:59'])
@@ -50,7 +52,58 @@ import datetime
 import joblib
 
 
+def sort_by_datetime(datetime_array, *data_arrays):
+    """
+    根据 datetime_array 排序其他数据数组，并返回排序后的结果
 
+    参数:
+    datetime_array: numpy array, 必须是 datetime64 类型
+    *data_arrays: 其他任意数量的 numpy array，与 datetime_array 一一对应
+
+    返回:
+    sorted_datetime, sorted_data_arrays: 排序后的 datetime 和其他数据数组
+    """
+    # 将 datetime_array 转换为 datetime64[ns] 格式
+
+    # 获取排序索引
+    sorted_indices = np.argsort(np.array(datetime_array, dtype='datetime64[ns]'))
+
+    # 对 datetime_array 进行排序
+    sorted_datetime = datetime_array[sorted_indices]
+
+    # 对其他传入的数据数组进行排序
+    sorted_data_arrays = [data_array[sorted_indices] for data_array in data_arrays]
+    
+
+    return(sorted_datetime, *sorted_data_arrays)
+
+    
+
+
+
+def datetime_to_timestamp(data_time):
+    """
+    将日期时间字符串的NumPy数组转换为时间戳（以秒为单位）的NumPy数组。
+
+    参数:
+    data_time : np.array
+        包含日期时间字符串的NumPy数组，格式为 'YYYY-MM-DD HH:MM:SS'
+
+    返回:
+    np.array
+        包含对应时间戳的NumPy数组（以秒为单位的整数）
+    """
+    # 将NumPy数组转换为Pandas Series
+    s = pd.Series(data_time)
+    
+    # 将字符串转换为datetime对象
+    dt = pd.to_datetime(s)
+    
+    # 将datetime对象转换为时间戳（以秒为单位）
+    timestamps = dt.astype('int64') // 10**9
+    
+    # 转换回NumPy数组并返回
+    return timestamps.to_numpy()
 
 
 
@@ -328,6 +381,8 @@ def  load_prototype_data(file_path,pos=None):
     else:
         print('pos参数输入错误')
         return None
+    
+
 
 def get_data(file_path:str,
                  name=None,
@@ -699,7 +754,7 @@ import csv
 import numpy as np
 
 def save_dict_to_csv(data, csv_file, fill_value=None):
-    """
+    """ 与 load_dict_from_csv 配套使用，将字典数据保存为CSV文件。
     将字典数据保存为CSV文件，填充不等长的列。
 
     参数:
@@ -729,7 +784,49 @@ def save_dict_to_csv(data, csv_file, fill_value=None):
     print(f"数据已成功写入到 {csv_file}")
 
 
+import csv
 
+def load_dict_from_csv(file_path):
+    """
+    从CSV文件中加载数据到字典，自动检测和处理数组格式的列。
+    
+    参数:
+    file_path (str): 要读取的CSV文件路径。
+    
+    返回:
+    dict: 包含从CSV文件加载的数据的字典，每个键对应一个列。
+    数组格式的列会被解析为NumPy数组。
+    """
+
+    def is_array_like(s):
+        """
+        检查字符串是否看起来像一个数组。
+        """
+        return s.strip().startswith('[') and s.strip().endswith(']')
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"文件 {file_path} 不存在")
+    
+    df = pd.read_csv(file_path)
+    data = {}
+    
+    # 动态检测数组列
+    array_columns = [col for col in df.columns if df[col].dtype == 'object' and df[col].apply(is_array_like).all()]
+    
+    # 处理数组列
+    for col in array_columns:
+        data[col] = np.array([np.fromstring(i.strip('[]'), sep=' ', dtype=np.float32) for i in df[col].values])
+    
+    # 处理其他列
+    for col in df.columns:
+        if col not in array_columns:
+            data[col] = df[col].values
+    
+    print(f"已成功从 {file_path} 加载数据")
+    print("检测到的数组列:", array_columns)
+    for key, value in data.items():
+        print(f"{key} shape:", value.shape)
+    
+    return data
 
 if __name__ == "__main__":
     pass

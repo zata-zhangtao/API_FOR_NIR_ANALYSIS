@@ -3,6 +3,7 @@ from typing import Union
 ---------
 Functions:
 ---------  
+    - plotly_simple_chart(data, x_axis=None, x_tick_interval=100, x_title="Time", y_title="PD Sample Value", title="Sample Data Over Time", template="plotly_white", tick_angle=90) 
     - analyze_model_performance(y_train, y_train_pred, y_val, y_val_pred, y_test, y_test_pred) 
     - plot_actual_vs_predicted(X_axis_train, y_train, y_train_pred, X_axis_val, y_val, y_val_pred, X_axis_test, y_test, y_test_pred)
     - plot_pca_with_class_distribution(X_train, X_val, X_test, y_train, y_val, y_test, n_components=3) 
@@ -22,6 +23,7 @@ Functions:
 ---------
 Example:
 ---------
+    - 使用plotly画简单折线图  plotly_simple_chart
     - 自动判断任务类型并输出分析报告  analyze_model_performance
     - 画训练集验证集测试集的图，横坐标我一般设置成时间顺序，也可以设置其他，可以画散点图或者是折线图    plot_actual_vs_predicted
     - 画PCA降维图,传入训练集验证集和验证集  plot_pca_with_class_distribution
@@ -63,6 +65,58 @@ from sklearn.metrics import (
 )
 import matplotlib.pyplot as plt
 import numpy as np
+
+
+
+def plotly_simple_chart(data, x_axis=None, x_tick_interval=100, x_title="Time", y_title="Intensity", title="Data Over Time", template="plotly_white", tick_angle=90):
+    
+    """
+    绘制数据图表，支持可选参数调整。
+
+    参数:
+    - data: 必选，二维numpy数组，每列为一个样本
+    - x_axis: 可选，x轴坐标的numpy数组，默认为None
+    - x_tick_interval: 可选，x轴显示间隔，默认为100
+    - x_title: 可选，x轴标题，默认为"Time"
+    - y_title: 可选，y轴标题，默认为"PD Sample Value"
+    - title: 可选，表的标题，默认为"Sample Data Over Time"
+    - template: 可选，Plotly图表模板，默认为"plotly_white"
+    - tick_angle: 可选，x轴刻度角度，默认为90度
+    """
+    import warnings
+    warnings.warn("这里的画图和matplotlib一样,每一列才是一个样本。", UserWarning)
+    fig = go.Figure()
+
+    # 绘制每列数据
+    for i in range(data.shape[1]):
+        fig.add_trace(go.Scatter(y=data[:, i], mode='lines', name=f'{i+1}'))
+
+    # 如果没有提供x_axis，使用默认的索引
+    if x_axis is None:
+        x_axis = np.arange(data.shape[0])
+
+    # 设置x轴刻度值
+    x_ticks = np.arange(0, len(x_axis), x_tick_interval)
+
+    # 更新图表布局
+    fig.update_layout(
+        title=title,
+        xaxis_title=x_title,
+        yaxis_title=y_title,
+        xaxis=dict(
+            tickmode='array',
+            tickvals=x_ticks,
+            ticktext=x_axis[x_ticks],
+            tickangle=tick_angle
+        ),
+        template=template
+    )
+
+    fig.show()
+
+
+
+
 
 def analyze_model_performance(y_train, y_train_pred, y_val, y_val_pred, y_test, y_test_pred):
     """
@@ -382,7 +436,7 @@ import plotly.graph_objs as go
 from scipy.stats import pearsonr, spearmanr
 
 
-def plot_mean(data_name,X_name,y_name, data_X, data_y, scale=True,draw_y=True, save_dir=None,width_and_height=None,X_ticks=None):
+def plot_mean( data_X, data_y,data_name = '',X_name = '',y_name='',scale=True,draw_y=True, save_dir=None,width_and_height=None,X_ticks=None):
 # 2024-10-10
     '''
     example:

@@ -37,6 +37,10 @@ import nirapi.ML_model as AF
 import numpy as np
 from sklearn.metrics import mean_absolute_error, mean_squared_error,r2_score
 import random
+import warnings
+import time
+
+
 # matplotlib.use('TkAgg') 
 
 
@@ -921,11 +925,12 @@ def Auto_tuning_with_svr(X=None,y=None,name="auto_tuning",epoch=100,n_trial=200,
 
 
 
-
 class save_data_to_csv:
+    
     '''import filename with path and colums , if path is not exist ,create it
     '''
     def __init__(self,file_name,columns):
+        
         self.file_name = file_name
         self.columns = columns
         try:
@@ -939,848 +944,10 @@ class save_data_to_csv:
 
 
 
-
-def run_optuna(X,y,isReg,chose_n_trails,selected_metric = 'r',save=None,save_name= "",**kw):
-    """
-    -----
-    params
-    -----
-        X: np.array 2-D
-        y: np.array 1-D
-        isReg: if it is a reg task, then True
-        chose_n_trails: Optuna tuning iterations
-        selected_metric:example: 'mae'  ---   ['mae','mse','r2','r',"accuracy", "precision", "recall"] Selecting metrics for Optuna hyperparameter tuning.  
-        save: save_path  example: "./data/"
-        save_name: save_name  example: "test"
-        kw: example: {"selected_outlier":["不做异常值去除","mahalanobis"] ,"selected_data_split":["random_split"],"selected_preprocess":["不做预处理","mean_centering","snv"],"selected_feat_sec":["不做特征选择"]}   --  Fill in the model dictionary included in the hyperparameter tuning
-    """
-
-    import random
-
-
-
-    def choose_random_elements(my_list, num_elements):
-        """从函数列表中随机选择一定数量的函数
-        Parameters
-        ----------
-        my_list : list
-            函数列表,其中的元素是函数名，字符串类型，如["snv", "msc"]
-        num_elements: int
-            选择的函数数量, 0选择其中一个, 其他值表示根据值随机可重复组合
-        Returns
-        -------
-        str or list
-            如果只有一个元素，返回的是字符串，否则返回的是列表
-        ------
-        """
-    #
-
-        if num_elements == 0:
-            return random.choice(my_list)
-        else:
-            return random.choices(my_list, k=num_elements)
-
-    # 修改数据
-    #################################################################################################################################################
-    # 获得光谱数据和标签
-    X = X
-    y = y
-    isReg = isReg
-    #################################################################################################################################################
-
-    # 一个列表，用于存储每次调参的模型
-    selection_summary_5_tab2 = [0 for i in range(8)]
-    # 在选择回归任务时，提供回归模型的选择
-    if isReg:
-        model_options = ['LR', 'SVR','PLSR', 'Bayes(贝叶斯回归)','RFR(随机森林回归)']
-    else:
-        # 在选择分类任务时，提供分类模型的选择
-        model_options = ['LogisticRegression','SVM','DT','RandomForest','KNN','Bayes(贝叶斯分类)',"GradientBoostingTree","XGBoost"]
-
-    temp_list_to_database = {}
-    y_data_to_csv = {}
-
-    ####################################################################################################################################################
-    ##################################                     设置调参使用哪些参数               begin     #################################################
-    ####################################################################################################################################################
-    ## 选择异常值去除的选项
-    selected_outlier = ["mahalanobis"]
-    if "selected_outlier" in kw.keys():
-        selected_outlier = kw["selected_outlier"]
-    # 选择数据拆分的选项
-    selected_data_split = [ "custom_train_test_split"]
-    if "selected_data_split" in kw.keys():
-        selected_data_split = kw["selected_data_split"]
-    data_split_ratio  = 0.3
-
-    #选择预处理的选项
-    selected_preprocess = ["不做预处理", "mean_centering", "normalization", "standardization", "poly_detrend", "snv", "savgol", "msc","d1", "d2", "rnv", "move_avg"]
-    if "selected_preprocess" in kw.keys():
-        selected_preprocess = kw["selected_preprocess"]
-    preprocess_number_input = 2
-
-
-    #选择特征选择的选项")
-    selected_feat_sec = ["不做特征选择"]
-    if "selected_feat_sec" in kw.keys():
-        selected_feat_sec = kw["selected_feat_sec"]
-    #选择降维的选项")
-    selected_dim_red = ["不做降维"]
-    if "selected_dim_red" in kw.keys():
-        selected_dim_red = kw["selected_dim_red"]
-    #选择参与调参的模型")
-    selected_model = model_options
-    if "selected_model" in kw.keys():
-        selected_model = kw["selected_model"]
-    #选择以那种指标进行调参")
-    reg_metric = ["mae", "mse", "r2",'r']
-    classification_metric = ["accuracy", "precision", "recall"]
-    selected_metric = selected_metric
-
-    # 调参次数
-    ####################################################################################################################################################
-    ##################################                     设置调参使用哪些参数               end        #################################################
-    ####################################################################################################################################################
-
-
-
-
-
-
-
-    def param_by_optuna(trial):
-        # 命名规则： {类别名：{方法名：[方法函数（对象）,{参数名: trainl对象（名称为:函数名_参数名） }]}}
-
-        functions_ = {
-            'Pretreatment': {
-                '不做异常值去除': [AF.return_inputs, {}],
-                'mahalanobis':
-                    [AF.mahalanobis, {'threshold': trial.suggest_int('mahalanobis_threshold', 1, 100)}],
-            },
-            'Dataset_Splitting': {
-                'random_split': [AF.random_split, {'test_size': trial.suggest_float('random_split_test_size', 0.1, 0.9) if data_split_ratio == 0 else data_split_ratio,
-                                                    'random_seed':  trial.suggest_int('random_split_random_seed', 0, 100)   }],
-                'custom_train_test_split':[AF.custom_train_test_split , {'test_size': trial.suggest_float('custom_train_test_split_test_size', 0.1, 0.9) if data_split_ratio == 0 else data_split_ratio,
-                                                                            'method': trial.suggest_categorical('custom_train_test_split_method', ['KS', 'SPXY'])}],
-                            },
-            'Preprocess': {
-                '不做预处理': [AF.return_inputs, {}],
-                'mean_centering': [AF.mean_centering, {'axis':trial.suggest_categorical('mean_centering_axis',[None,0,1])}],
-                'normalization': [AF.normalization,
-                                    {'axis': trial.suggest_categorical('normalization_axis', [None,0,1])}],
-                'standardization': [AF.standardization,
-                                    {'axis': trial.suggest_categorical('standardization_axis', [None,0,1])}],
-                'poly_detrend': [AF.poly_detrend,   {'poly_order': trial.suggest_int('poly_detrend_poly_order', 2, 4)}],
-                'snv': [AF.snv, {}],
-                'savgol':[AF.savgol,{
-                    'window_len':trial.suggest_int('savgol_window_len',1,100),
-                    'poly':trial.suggest_int('savgol_poly',0,trial.params['savgol_window_len']-1),
-                    'deriv':trial.suggest_int('savgol_deriv',0,2),
-                }],
-                'msc': [AF.msc, {'mean_center': trial.suggest_categorical('msc_mean_center', [True, False])}],
-                'd1':[AF.d1, {}],
-                'd2':[AF.d2, {}],
-                'rnv':[AF.rnv, {'percent' : trial.suggest_int('rnv_percent', 1, 100)}],
-                'move_avg':[AF.move_avg, {'window_size': trial.suggest_int('move_avg_window_size', 3, 399, step=2)}],
-                'baseline_iarpls':[AF.baseline_iarpls, {'lam': trial.suggest_int('baseline_iarpls_lam', 1, 300, step=1)}],
-                'baseline_airpls':[AF.baseline_airpls, {'lam': trial.suggest_int('baseline_airpls_lam',1, 300, step=1)}],
-                'baseline_derpsalsa':[AF.baseline_derpsalsa, {'lam': trial.suggest_int('baseline_derpsalsa_lam', 1, 300, step=1)}],
-
-            },
-            "Feature_Selection": {
-                '不做特征选择': [AF.return_inputs, {}],
-                'cars': [AF.cars, {'n_sample_runs': trial.suggest_int('cars_n_sample_runs', 10, 1000),
-                                    'pls_components': trial.suggest_int('cars_pls_components', 1, 20),
-                                    'n_cv_folds': trial.suggest_int('cars_n_cv_folds', 1, 10)}],
-                'spa': [AF.spa, {'i_init': trial.suggest_int('spa_i_init', 0, X.shape[1]-1),
-                                    'method': trial.suggest_categorical('spa_method', [0, 1]),
-                                    'mean_center': trial.suggest_categorical('spa_mean_center', [True, False])}],
-                'corr_coefficient': [AF.corr_coefficient, {'threshold': trial.suggest_float('corr_coefficient_threshold', 0.0, 1.0)}],
-                'anova': [AF.anova, {
-                    'threshold': trial.suggest_float('anova_threshold', 0.0, 1.0)}],
-                'fipls': [AF.fipls, {'n_intervals': trial.suggest_int('fipls_n_intervals', 1, 5),
-                                    'interval_width': trial.suggest_float('fipls_interval_width', 10, 500),
-                                    'n_comp': trial.suggest_int('fipls_n_comp', 2, 20)}]
-            },
-
-            'Dimensionality_reduction': {
-                '不做降维': [AF.return_inputs, {}],
-                'pca': [AF.pca, {'n_components': trial.suggest_int('pca_n_components', 1, 50)}],
-            },
-
-
-            'Model_Selection': {
-                'LR': [AF.LR, {}],
-                'SVR': [AF.SVR,
-                            {'kernel': trial.suggest_categorical('SVR_kernel', ['linear', 'poly', 'rbf', 'sigmoid']),
-                                'C': trial.suggest_float("SVR_c", 1e-5, 1000, log=True),
-                                'epsilon': trial.suggest_float('SVR_epsilon', 0.01, 1, log=True),
-                                'degree': trial.suggest_int('SVR_degree', 1, 5),
-                                'gamma': trial.suggest_float("SVR_gamma", 1e-5, 1000, log=True)}],
-                'PLSR': [AF.PLSR, {'n_components': trial.suggest_int('PLSR_n_components', 1, 20),
-                                    'scale': trial.suggest_categorical('PLSR_scale', [True, False])}],
-                'Bayes(贝叶斯回归)': [AF.bayes, {
-                                                    # 'n_iter': trial.suggest_int('Bayes(贝叶斯回归)_n_iter', 1, 100),
-                                                    'tol': trial.suggest_float('Bayes(贝叶斯回归)_tol', 0.0001, 0.1),
-                                                    'alpha_1': trial.suggest_float('Bayes(贝叶斯回归)_alpha_1', 0.0001, 0.1),
-                                                    'alpha_2': trial.suggest_float('Bayes(贝叶斯回归)_alpha_2', 0.0001, 0.1),
-                                                    'lambda_1': trial.suggest_float('Bayes(贝叶斯回归)_lambda_1', 0.0001, 0.1),
-                                                    'lambda_2': trial.suggest_float('Bayes(贝叶斯回归)_lambda_2', 0.0001, 0.1),
-                                                    'compute_score': trial.suggest_categorical('Bayes(贝叶斯回归)_compute_score', [True, False]),
-                                                    'fit_intercept': trial.suggest_categorical('Bayes(贝叶斯回归)_fit_intercept', [True, False])}],
-                'RFR(随机森林回归)': [AF.RFR, {'n_estimators': trial.suggest_int('RFR(随机森林回归)_n_estimators', 1, 100),
-                                                'criterion': trial.suggest_categorical('RFR(随机森林回归)_criterion', ["squared_error", "absolute_error", "friedman_mse", "poisson"]),
-                                                # 'max_depth': trial.suggest_int('RFR(随机森林回归)_max_depth', 1, 100),
-                                                'min_samples_split': trial.suggest_int('RFR(随机森林回归)_min_samples_split', 1, 100),
-                                                'min_samples_leaf': trial.suggest_int('RFR(随机森林回归)_min_samples_leaf', 1, 100),
-                                                'min_weight_fraction_leaf': trial.suggest_float('RFR(随机森林回归)_min_weight_fraction_leaf', 0.0001, 0.1),
-                                                'max_features': trial.suggest_float('RFR(随机森林回归)_max_features', 0.1,1.0),
-                                                # 'max_leaf_nodes': trial.suggest_int('RFR(随机森林回归)_max_leaf_nodes', 1, 100),
-                                                # 'min_impurity_decrease': trial.suggest_float('RFR(随机森林回归)_min_impurity_decrease', 0.0001, 0.1),
-                                                # 'bootstrap': trial.suggest_categorical('RFR(随机森林回归)_bootstrap', [True, False]),
-                                                # 'oob_score': trial.suggest_categorical('RFR(随机森林回归)_oob_score', [True, False]),
-                                                # 'n_jobs': trial.suggest_int('RFR(随机森林回归)_n_jobs', 1, 100),
-                                                'random_state': trial.suggest_int('RFR(随机森林回归)_random_state', 1, 100),
-                                                # 'verbose': trial.suggest_int('RFR(随机森林回归)_verbose', 0, 100),
-                                                # 'warm_start': trial.suggest_categorical('RFR(随机森林回归)_warm_start', [True, False]),
-                                                # 'ccp_alpha': trial.suggest_float('RFR(随机森林回归)_ccp_alpha', 0.0001, 0.1),
-                                                # 'max_samples': (trial.suggest_float('RFR(随机森林回归)_max_samples', 0.1, 1.0) if trial.params['RFR(随机森林回归)_bootstrap'] else None)
-                                                }],
-                'LogisticRegression':[AF.logr,{}],
-                'SVM': [AF.SVM, {
-                        'kernel': trial.suggest_categorical('SVM_kernel', ['linear', 'poly', 'rbf', 'sigmoid']),
-                        'C': trial.suggest_float("SVM_C", 1e-5, 1000, log=True),
-                        'degree': trial.suggest_int('SVM_degree', 1, 5),
-                        'gamma': trial.suggest_float("SVM_gamma", 1e-5, 1000, log=True),
-                        # 'coef0': trial.suggest_float('SVM_coef0', 0.01, 100),
-                        'random_state': trial.suggest_int('SVM_random_state', 1, 100),
-                    }],
-                'DT': [AF.DT, {
-                    'criterion': trial.suggest_categorical('DT_criterion', ["gini", "entropy", "log_loss"]),
-                    'splitter': trial.suggest_categorical('DT_splitter', ["best", "random"]),
-                    'min_samples_split': trial.suggest_int('DT_min_samples_split', 2, 100),
-                    'min_samples_leaf': trial.suggest_int('DT_min_samples_leaf', 1, 100),
-                    # 'max_features': trial.suggest_float('DT_max_features', 0.1, 1.0),
-                    'random_state': trial.suggest_int('DT_random_state', 1, 100),
-                }],
-                'RandomForest': [AF.RandomForest, {
-                    'n_estimators': trial.suggest_int('RandomForest_n_estimators', 1, 100),
-                    'criterion': trial.suggest_categorical('RandomForest_criterion',
-                                                            ["entropy", "gini", "log_loss"]),
-                    # 'max_depth': trial.suggest_int('RandomForest_max_depth', 1, 100),
-                    'min_samples_split': trial.suggest_int('RandomForest_min_samples_split', 1, 100),
-                    'min_samples_leaf': trial.suggest_int('RandomForest_min_samples_leaf', 1, 100),
-                    # 'min_weight_fraction_leaf': trial.suggest_float('RandomForest_min_weight_fraction_leaf', 0.0001, 0.1),
-                    # 'max_features': trial.suggest_float('RandomForest_max_features', 0.1,1.0),
-                    # 'max_leaf_nodes': trial.suggest_int('RandomForest_max_leaf_nodes', 1, 100),
-                    # 'min_impurity_decrease': trial.suggest_float('RandomForest_min_impurity_decrease', 0.0001, 0.1),
-                    # 'bootstrap': trial.suggest_categorical('RandomForest_bootstrap', [True, False]),
-                    # 'oob_score': trial.suggest_categorical('RandomForest_oob_score', [True, False]),
-                    # 'n_jobs': trial.suggest_int('RandomForest_n_jobs', 1, 100),
-                    'random_state': trial.suggest_int('RandomForest_random_state', 1, 100),
-                    # 'verbose': trial.suggest_int('RandomForest_verbose', 0, 100),
-                    # 'warm_start': trial.suggest_categorical('RandomForest_warm_start', [True, False]),
-                    # 'ccp_alpha': trial.suggest_float('RandomForest_ccp_alpha', 0.0001, 0.1),
-                    # 'max_samples': (trial.suggest_float('RandomForest_max_samples', 0.1, 1.0) if trial.params['RandomForest_bootstrap'] else None)
-                }],
-                'KNN': [AF.KNN, {
-                    'n_neighbors': trial.suggest_int('KNN_n_neighbors', 1, 100),
-                    'weights': trial.suggest_categorical('KNN_weights', ['uniform', 'distance']),
-                    'algorithm': trial.suggest_categorical('KNN_algorithm',
-                                                            ['auto', 'ball_tree', 'kd_tree', 'brute']),
-                    'leaf_size': trial.suggest_int('KNN_leaf_size', 1, 100),
-                    'p': trial.suggest_int('KNN_p', 1, 100),
-                    'metric': trial.suggest_categorical('KNN_metric',
-                                                        ['minkowski', 'euclidean', 'manhattan', 'chebyshev']),
-                    # 'n_jobs': trial.suggest_int('KNN_n_jobs', 1, 100),
-                }],
-                'Bayes(贝叶斯分类)': [
-                    AF.CustomNaiveBayes, {
-                        'classifier_type': trial.suggest_categorical('Bayes(贝叶斯分类)_classifier_type',
-                                                                        ['gaussian', 'multinomial', 'bernoulli']),
-                        'alpha': trial.suggest_float('Bayes(贝叶斯分类)_alpha', 0.0001, 0.1),
-                    }],
-                'GradientBoostingTree': [AF.GradientBoostingTree, {
-                    'n_estimators': trial.suggest_int('GradientBoostingTree_n_estimators', 1, 100),
-                    'learning_rate': trial.suggest_float('GradientBoostingTree_learning_rate', 0.01, 1.0),
-                    'max_depth': trial.suggest_int('GradientBoostingTree_max_depth', 1, 100),
-                    'random_state': trial.suggest_int('GradientBoostingTree_random_state', 1, 100),
-                }],
-                'XGBoost': [AF.XGBoost, {
-                    'n_estimators': trial.suggest_int('XGBoost_n_estimators', 1, 100),
-                    'learning_rate': trial.suggest_float('XGBoost_learning_rate', 0.01, 1.0),
-                    'max_depth': trial.suggest_int('XGBoost_max_depth', 1, 100),
-                    'subsample': trial.suggest_float('XGBoost_subsample', 0.1, 1.0),
-                    'colsample_bytree': trial.suggest_float('XGBoost_colsample_bytree', 0.1, 1.0),
-                    'random_state': trial.suggest_int('XGBoost_random_state', 1, 100),
-                }],
-
-                # 模型选择的函数和参数
-            },
-        }
-
-
-
-        selection_summary_5_tab2[0] = choose_random_elements(selected_outlier, 0)
-        selection_summary_5_tab2[2] = choose_random_elements(selected_data_split, 0)
-        selection_summary_5_tab2[3] = choose_random_elements(selected_preprocess, preprocess_number_input)
-        selection_summary_5_tab2[4] = choose_random_elements(selected_feat_sec, 0)
-        selection_summary_5_tab2[7] = choose_random_elements(selected_dim_red, 0)
-        selection_summary_5_tab2[5] = choose_random_elements(selected_model, 0)
-
+# TODO remove this function
+def run_optuna_v3(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=None,save=None,save_name= "",
+                  **kw):
     
-
-
-
-
-
-        ## begin: 参数列表
-        # global  temp_list_to_database
-        temp_list_to_database[trial.number] = []
-        temp_list_to_database[trial.number].append([[selection_summary_5_tab2[0]],[functions_["Pretreatment"][selection_summary_5_tab2[0]][1]]])
-        temp_list_to_database[trial.number].append([[selection_summary_5_tab2[2]], [functions_["Dataset_Splitting"][selection_summary_5_tab2[2]][1]]])
-        #
-        #
-        temp_process_name = []
-        temp_process_func = []
-        for func_info in selection_summary_5_tab2[3]:
-            temp_process_name.append(func_info)
-            temp_process_func.append(functions_["Preprocess"][func_info][1])
-        temp_list_to_database[trial.number].append([temp_process_name, temp_process_func])
-        # del temp_process_name, temp_process_func
-        #
-        #
-        if selection_summary_5_tab2[4] != '':
-            temp_list_to_database[trial.number].append(
-                [[selection_summary_5_tab2[4]], [functions_["Feature_Selection"][selection_summary_5_tab2[4]][1]]])
-        else:
-            temp_list_to_database[trial.number].append([[selection_summary_5_tab2[4]], [{}]])
-
-        temp_list_to_database[trial.number].append([[selection_summary_5_tab2[7]], [functions_["Dimensionality_reduction"][selection_summary_5_tab2[7]][1]]])
-        temp_list_to_database[trial.number].append([[selection_summary_5_tab2[5]], [functions_["Model_Selection"][selection_summary_5_tab2[5]][1]]])
-        #
-
-        X_new, y_new = functions_["Pretreatment"][selection_summary_5_tab2[0]][0](X, y,
-                                                                                **functions_["Pretreatment"][
-                                                                                    selection_summary_5_tab2[0]][1])
-        X_train, X_test, y_train, y_test = functions_["Dataset_Splitting"][selection_summary_5_tab2[2]][0](X_new,
-                                                                                                                y_new,
-                                                                                                                **functions_[
-                                                                                                                    "Dataset_Splitting"][
-                                                                                                                    selection_summary_5_tab2[
-                                                                                                                        2]][
-                                                                                                                    1])
-        for func_info in selection_summary_5_tab2[3]:
-            X_train, X_test,y_train,y_test= functions_["Preprocess"][func_info][0](X_train, X_test,y_train,y_test,
-                                                                                    **functions_["Preprocess"][func_info][1])
-        X_train, X_test,y_train,y_test = functions_["Feature_Selection"][selection_summary_5_tab2[4]][0](X_train, X_test,y_train,y_test,
-                                                                                                **functions_["Feature_Selection"][
-                                                                                                    selection_summary_5_tab2[
-                                                                                                        4]][1])
-        X_train, X_test,y_train,y_test = functions_["Dimensionality_reduction"][selection_summary_5_tab2[7]][0](X_train, X_test,y_train,y_test,
-                                                                                                **functions_[
-                                                                                                    "Dimensionality_reduction"][
-                                                                                                    selection_summary_5_tab2[
-                                                                                                        7]][1])
-        y_train,y_test,y_train_pred, y_pred = functions_["Model_Selection"][selection_summary_5_tab2[5]][0](X_train, X_test,
-                                                                                                    y_train, y_test,
-                                                                                                    **functions_[
-                                                                                                        "Model_Selection"][
-                                                                                                        selection_summary_5_tab2[
-                                                                                                            5]][1])
-        y_data_to_csv[trial.number] = [y_test,y_pred]
-
-        trial.set_user_attr("y_test", y_test)
-        trial.set_user_attr("y_pred", y_pred)
-        trial.set_user_attr("y_train", y_train)
-        trial.set_user_attr("y_train_pred", y_train_pred)
-        if selected_metric in reg_metric:
-            if selected_metric == 'mae':
-                res = mean_absolute_error(y_test, y_pred)
-            elif selected_metric == 'mse':
-                res = mean_squared_error(y_test, y_pred)
-            elif selected_metric == 'r2':
-                
-                res = r2_score(y_test, y_pred)
-            elif selected_metric =='r':
-                from scipy.stats import pearsonr
-                res = pearsonr(y_test, y_pred)[0]
-            return res
-
-
-        else:
-            from sklearn.metrics import accuracy_score, precision_score, recall_score
-            if selected_metric == 'accuracy':
-                res = accuracy_score(y_test, y_pred)
-            elif selected_metric == 'precision':
-                
-                res = precision_score(y_test, y_pred,average="weighted")
-            elif selected_metric =="recall":
-                res = recall_score(y_test, y_pred,average="weighted")
-            return res
-
-
-
-    def objective(trial):
-        # sc = param_by_optuna(trial)
-        # return sc
-        try:
-            sc = param_by_optuna(trial)
-            return sc
-        except Exception as e:
-            print(e)
-            # if isReg:
-            #     return 100000000
-            # else:
-            #     return 0
-
-    # optuna.logging.set_verbosity(optuna.logging.WARNING)
-    # optuna.logging.enable_default_handler()
-    if selected_metric in ["accuracy", "precision", "recall",'r2','r']:
-        direction ='maximize'
-    else:
-        # 否则，默认为最小化目标，例如MAE、MSE或R2
-        direction = 'minimize'
-    study = optuna.create_study(direction=direction)
-    study.optimize(objective,n_trials=chose_n_trails)
-    print(str(temp_list_to_database[study.best_trial.number]))
-
-    
-    train_test_scatter(study.best_trial.user_attrs['y_train'],study.best_trial.user_attrs['y_train_pred'],study.best_trial.user_attrs['y_test'],study.best_trial.user_attrs['y_pred'],category=save_name,save = save)
-    
-            
-    
-    # if selected_metric in reg_metric:
-    #     st.write(f"最优{selected_metric}",max_result)
-    #     st.write('reg_metric: ', best_trial_mertic )
-    #     # st.write("具体参数:  ",str(temp_list_to_database[best_trial_num]))
-    #     st.write("具体参数： ", temp_list_to_database[best_trial_num])
-
-    # else:
-    #     st.write(f"最优{selected_metric}",max_result)
-    #     st.write('["accuracy", "precision", "recall"]: ', best_trial_mertic )
-    #     st.write("具体参数:  ",str(temp_list_to_database[best_trial_num]))
-    #     st.write("具体参数： ", temp_list_to_database[best_trial_num])
-
-    # if True:
-    #     st.session_state.model_param_by_optuna = temp_list_to_database[best_trial_num]
-
-
-
-def run_optuna_v2(X,y,isReg,chose_n_trails,selected_metric = 'r',save=None,save_name= "",**kw):
-    # 光谱数据的自动调参函数，可以自动调整选用建模过程中的哪些方法，参数。
-    # 相比于v1版本，v2版本增加（1）对分类任务的支持优化（2）增加了划分数据的方法 (3)增加了验证集，最终输出的是基于测试集的指标
-    """
-    -----
-    params
-    -----
-        X: np.array 2-D
-        y: np.array 1-D
-        isReg: if it is a reg task, then True
-        chose_n_trails: Optuna tuning iterations
-        selected_metric:example: 'mae'  ---   ['mae','mse','r2','r',"accuracy", "precision", "recall"] Selecting metrics for Optuna hyperparameter tuning.  
-        save: save_path  example: "./data/"
-        save_name: save_name  example: "test"
-        kw: example: {"selected_outlier":["不做异常值去除","mahalanobis"] ,"selected_data_split":["random_split"],"selected_preprocess":["不做预处理","mean_centering","snv"],"selected_feat_sec":["不做特征选择"]}   --  Fill in the model dictionary included in the hyperparameter tuning
-    """
-
-    import random
-
-
-
-    def choose_random_elements(my_list, num_elements):
-        """从函数列表中随机选择一定数量的函数
-        Parameters
-        ----------
-        my_list : list
-            函数列表,其中的元素是函数名，字符串类型，如["snv", "msc"]
-        num_elements: int
-            选择的函数数量, 0选择其中一个, 其他值表示根据值随机可重复组合
-        Returns
-        -------
-        str or list
-            如果只有一个元素，返回的是字符串，否则返回的是列表
-        ------
-        """
-    #
-
-        if num_elements == 0:
-            return random.choice(my_list)
-        else:
-            return random.choices(my_list, k=num_elements)
-
-    # 修改数据
-    #################################################################################################################################################
-    # 获得光谱数据和标签
-    X = X
-    y = y
-    isReg = isReg
-    #################################################################################################################################################
-
-    # 一个列表，用于存储每次调参的模型
-    selection_summary_5_tab2 = [0 for i in range(8)]
-    # 在选择回归任务时，提供回归模型的选择
-    if isReg:
-        model_options = ['LR', 'SVR','PLSR', 'Bayes(贝叶斯回归)','RFR(随机森林回归)']
-    else:
-        # 在选择分类任务时，提供分类模型的选择
-        model_options = ['LogisticRegression','SVM','DT','RandomForest','KNN','Bayes(贝叶斯分类)',"GradientBoostingTree","XGBoost"]
-
-    temp_list_to_database = {}
-    y_data_to_csv = {}
-
-    ####################################################################################################################################################
-    ##################################                     设置调参使用哪些参数               begin     #################################################
-    ####################################################################################################################################################
-    ## 选择异常值去除的选项
-    selected_outlier = ["mahalanobis"]
-    if "selected_outlier" in kw.keys():
-        selected_outlier = kw["selected_outlier"]
-    # 选择数据拆分的选项
-    selected_data_split = [ "custom_train_test_split"]
-    if "selected_data_split" in kw.keys():
-        selected_data_split = kw["selected_data_split"]
-    data_split_ratio  = 0.3
-
-    #选择预处理的选项
-    selected_preprocess = ["不做预处理", "mean_centering", "normalization", "standardization", "poly_detrend", "snv", "savgol", "msc","d1", "d2", "rnv", "move_avg"]
-    if "selected_preprocess" in kw.keys():
-        selected_preprocess = kw["selected_preprocess"]
-    preprocess_number_input = 3
-
-
-    #选择特征选择的选项")
-    selected_feat_sec = ["不做特征选择"]
-    if "selected_feat_sec" in kw.keys():
-        selected_feat_sec = kw["selected_feat_sec"]
-    #选择降维的选项")
-    selected_dim_red = ["不做降维"]
-    if "selected_dim_red" in kw.keys():
-        selected_dim_red = kw["selected_dim_red"]
-    #选择参与调参的模型")
-    selected_model = model_options
-    if "selected_model" in kw.keys():
-        selected_model = kw["selected_model"]
-    #选择以那种指标进行调参")
-    reg_metric = ["mae", "mse", "r2",'r']
-    classification_metric = ["accuracy", "precision", "recall"]
-    selected_metric = selected_metric
-
-    # 调参次数
-    ####################################################################################################################################################
-    ##################################                     设置调参使用哪些参数               end        #################################################
-    ####################################################################################################################################################
-
-
-
-
-
-
-
-    def param_by_optuna(trial):
-        # 命名规则： {类别名：{方法名：[方法函数（对象）,{参数名: trainl对象（名称为:函数名_参数名） }]}}
-
-        functions_ = {
-            'Pretreatment': {
-                '不做异常值去除': [AF.return_inputs, {}],
-                'mahalanobis':
-                    [AF.mahalanobis, {'threshold': trial.suggest_int('mahalanobis_threshold', 1, 100)}],
-            },
-            'Dataset_Splitting': {
-                'random_split': [AF.random_split, {'test_size': trial.suggest_float('random_split_test_size', 0.1, 0.9) if data_split_ratio == 0 else data_split_ratio,
-                                                    'random_seed':  trial.suggest_int('random_split_random_seed', 0, 100)   }],
-                'custom_train_test_split':[AF.custom_train_test_split , {'test_size': trial.suggest_float('custom_train_test_split_test_size', 0.1, 0.9) if data_split_ratio == 0 else data_split_ratio,
-                                                                            'method': trial.suggest_categorical('custom_train_test_split_method', ['KS', 'SPXY'])}],
-                            },
-            'Preprocess': {
-                '不做预处理': [AF.return_inputs, {}],
-                'mean_centering': [AF.mean_centering, {'axis':trial.suggest_categorical('mean_centering_axis',[None,0,1])}],
-                'normalization': [AF.normalization,
-                                    {'axis': trial.suggest_categorical('normalization_axis', [None,0,1])}],
-                'standardization': [AF.standardization,
-                                    {'axis': trial.suggest_categorical('standardization_axis', [None,0,1])}],
-                'poly_detrend': [AF.poly_detrend,   {'poly_order': trial.suggest_int('poly_detrend_poly_order', 2, 4)}],
-                'snv': [AF.snv, {}],
-                'savgol':[AF.savgol,{
-                    'window_len':trial.suggest_int('savgol_window_len',1,100),
-                    'poly':trial.suggest_int('savgol_poly',0,trial.params['savgol_window_len']-1),
-                    'deriv':trial.suggest_int('savgol_deriv',0,2),
-                }],
-                'msc': [AF.msc, {'mean_center': trial.suggest_categorical('msc_mean_center', [True, False])}],
-                'd1':[AF.d1, {}],
-                'd2':[AF.d2, {}],
-                'rnv':[AF.rnv, {'percent' : trial.suggest_int('rnv_percent', 1, 100)}],
-                'move_avg':[AF.move_avg, {'window_size': trial.suggest_int('move_avg_window_size', 3, 399, step=2)}],
-                'baseline_iarpls':[AF.baseline_iarpls, {'lam': trial.suggest_int('baseline_iarpls_lam', 1, 300, step=1)}],
-                'baseline_airpls':[AF.baseline_airpls, {'lam': trial.suggest_int('baseline_airpls_lam',1, 300, step=1)}],
-                'baseline_derpsalsa':[AF.baseline_derpsalsa, {'lam': trial.suggest_int('baseline_derpsalsa_lam', 1, 300, step=1)}],
-
-            },
-            "Feature_Selection": {
-                '不做特征选择': [AF.return_inputs, {}],
-                'cars': [AF.cars, {'n_sample_runs': trial.suggest_int('cars_n_sample_runs', 10, 1000),
-                                    'pls_components': trial.suggest_int('cars_pls_components', 1, 20),
-                                    'n_cv_folds': trial.suggest_int('cars_n_cv_folds', 1, 10)}],
-                'spa': [AF.spa, {'i_init': trial.suggest_int('spa_i_init', 0, X.shape[1]-1),
-                                    'method': trial.suggest_categorical('spa_method', [0, 1]),
-                                    'mean_center': trial.suggest_categorical('spa_mean_center', [True, False])}],
-                'corr_coefficient': [AF.corr_coefficient, {'threshold': trial.suggest_float('corr_coefficient_threshold', 0.0, 1.0)}],
-                'anova': [AF.anova, {
-                    'threshold': trial.suggest_float('anova_threshold', 0.0, 1.0)}],
-                'fipls': [AF.fipls, {'n_intervals': trial.suggest_int('fipls_n_intervals', 1, 5),
-                                    'interval_width': trial.suggest_float('fipls_interval_width', 10, 500),
-                                    'n_comp': trial.suggest_int('fipls_n_comp', 2, 20)}]
-            },
-
-            'Dimensionality_reduction': {
-                '不做降维': [AF.return_inputs, {}],
-                'pca': [AF.pca, {'n_components': trial.suggest_int('pca_n_components', 1, 50)}],
-            },
-
-
-            'Model_Selection': {
-                'LR': [AF.LR, {}],
-                'SVR': [AF.SVR,
-                            {'kernel': trial.suggest_categorical('SVR_kernel', ['linear', 'poly', 'rbf', 'sigmoid']),
-                                'C': trial.suggest_float("SVR_c", 1e-5, 1000, log=True),
-                                'epsilon': trial.suggest_float('SVR_epsilon', 0.01, 1, log=True),
-                                'degree': trial.suggest_int('SVR_degree', 1, 5),
-                                'gamma': trial.suggest_float("SVR_gamma", 1e-5, 1000, log=True)}],
-                'PLSR': [AF.PLSR, {'n_components': trial.suggest_int('PLSR_n_components', 1, 20),
-                                    'scale': trial.suggest_categorical('PLSR_scale', [True, False])}],
-                'Bayes(贝叶斯回归)': [AF.bayes, {'n_iter': trial.suggest_int('Bayes(贝叶斯回归)_n_iter', 1, 100),
-                                                    'tol': trial.suggest_float('Bayes(贝叶斯回归)_tol', 0.0001, 0.1),
-                                                    'alpha_1': trial.suggest_float('Bayes(贝叶斯回归)_alpha_1', 0.0001, 0.1),
-                                                    'alpha_2': trial.suggest_float('Bayes(贝叶斯回归)_alpha_2', 0.0001, 0.1),
-                                                    'lambda_1': trial.suggest_float('Bayes(贝叶斯回归)_lambda_1', 0.0001, 0.1),
-                                                    'lambda_2': trial.suggest_float('Bayes(贝叶斯回归)_lambda_2', 0.0001, 0.1),
-                                                    'compute_score': trial.suggest_categorical('Bayes(贝叶斯回归)_compute_score', [True, False]),
-                                                    'fit_intercept': trial.suggest_categorical('Bayes(贝叶斯回归)_fit_intercept', [True, False])}],
-                'RFR(随机森林回归)': [AF.RFR, {'n_estimators': trial.suggest_int('RFR(随机森林回归)_n_estimators', 1, 100),
-                                                'criterion': trial.suggest_categorical('RFR(随机森林回归)_criterion', ["squared_error", "absolute_error", "friedman_mse", "poisson"]),
-                                                # 'max_depth': trial.suggest_int('RFR(随机森林回归)_max_depth', 1, 100),
-                                                'min_samples_split': trial.suggest_int('RFR(随机森林回归)_min_samples_split', 1, 100),
-                                                'min_samples_leaf': trial.suggest_int('RFR(随机森林回归)_min_samples_leaf', 1, 100),
-                                                'min_weight_fraction_leaf': trial.suggest_float('RFR(随机森林回归)_min_weight_fraction_leaf', 0.0001, 0.1),
-                                                'max_features': trial.suggest_float('RFR(随机森林回归)_max_features', 0.1,1.0),
-                                                # 'max_leaf_nodes': trial.suggest_int('RFR(随机森林回归)_max_leaf_nodes', 1, 100),
-                                                # 'min_impurity_decrease': trial.suggest_float('RFR(随机森林回归)_min_impurity_decrease', 0.0001, 0.1),
-                                                # 'bootstrap': trial.suggest_categorical('RFR(随机森林回归)_bootstrap', [True, False]),
-                                                # 'oob_score': trial.suggest_categorical('RFR(随机森林回归)_oob_score', [True, False]),
-                                                # 'n_jobs': trial.suggest_int('RFR(随机森林回归)_n_jobs', 1, 100),
-                                                'random_state': trial.suggest_int('RFR(随机森林回归)_random_state', 1, 100),
-                                                # 'verbose': trial.suggest_int('RFR(随机森林回归)_verbose', 0, 100),
-                                                # 'warm_start': trial.suggest_categorical('RFR(随机森林回归)_warm_start', [True, False]),
-                                                # 'ccp_alpha': trial.suggest_float('RFR(随机森林回归)_ccp_alpha', 0.0001, 0.1),
-                                                # 'max_samples': (trial.suggest_float('RFR(随机森林回归)_max_samples', 0.1, 1.0) if trial.params['RFR(随机森林回归)_bootstrap'] else None)
-                                                }],
-                'LogisticRegression':[AF.logr,{}],
-                'SVM': [AF.SVM, {
-                        'kernel': trial.suggest_categorical('SVM_kernel', ['linear', 'poly', 'rbf', 'sigmoid']),
-                        'C': trial.suggest_float("SVM_C", 1e-5, 1000, log=True),
-                        'degree': trial.suggest_int('SVM_degree', 1, 5),
-                        'gamma': trial.suggest_float("SVM_gamma", 1e-5, 1000, log=True),
-                        # 'coef0': trial.suggest_float('SVM_coef0', 0.01, 100),
-                        'random_state': trial.suggest_int('SVM_random_state', 1, 100),
-                    }],
-                'DT': [AF.DT, {
-                    'criterion': trial.suggest_categorical('DT_criterion', ["gini", "entropy", "log_loss"]),
-                    'splitter': trial.suggest_categorical('DT_splitter', ["best", "random"]),
-                    'min_samples_split': trial.suggest_int('DT_min_samples_split', 2, 100),
-                    'min_samples_leaf': trial.suggest_int('DT_min_samples_leaf', 1, 100),
-                    # 'max_features': trial.suggest_float('DT_max_features', 0.1, 1.0),
-                    'random_state': trial.suggest_int('DT_random_state', 1, 100),
-                }],
-                'RandomForest': [AF.RandomForest, {
-                    'n_estimators': trial.suggest_int('RandomForest_n_estimators', 1, 100),
-                    'criterion': trial.suggest_categorical('RandomForest_criterion',
-                                                            ["entropy", "gini", "log_loss"]),
-                    # 'max_depth': trial.suggest_int('RandomForest_max_depth', 1, 100),
-                    'min_samples_split': trial.suggest_int('RandomForest_min_samples_split', 1, 100),
-                    'min_samples_leaf': trial.suggest_int('RandomForest_min_samples_leaf', 1, 100),
-                    # 'min_weight_fraction_leaf': trial.suggest_float('RandomForest_min_weight_fraction_leaf', 0.0001, 0.1),
-                    # 'max_features': trial.suggest_float('RandomForest_max_features', 0.1,1.0),
-                    # 'max_leaf_nodes': trial.suggest_int('RandomForest_max_leaf_nodes', 1, 100),
-                    # 'min_impurity_decrease': trial.suggest_float('RandomForest_min_impurity_decrease', 0.0001, 0.1),
-                    # 'bootstrap': trial.suggest_categorical('RandomForest_bootstrap', [True, False]),
-                    # 'oob_score': trial.suggest_categorical('RandomForest_oob_score', [True, False]),
-                    # 'n_jobs': trial.suggest_int('RandomForest_n_jobs', 1, 100),
-                    'random_state': trial.suggest_int('RandomForest_random_state', 1, 100),
-                    # 'verbose': trial.suggest_int('RandomForest_verbose', 0, 100),
-                    # 'warm_start': trial.suggest_categorical('RandomForest_warm_start', [True, False]),
-                    # 'ccp_alpha': trial.suggest_float('RandomForest_ccp_alpha', 0.0001, 0.1),
-                    # 'max_samples': (trial.suggest_float('RandomForest_max_samples', 0.1, 1.0) if trial.params['RandomForest_bootstrap'] else None)
-                }],
-                'KNN': [AF.KNN, {
-                    'n_neighbors': trial.suggest_int('KNN_n_neighbors', 1, 100),
-                    'weights': trial.suggest_categorical('KNN_weights', ['uniform', 'distance']),
-                    'algorithm': trial.suggest_categorical('KNN_algorithm',
-                                                            ['auto', 'ball_tree', 'kd_tree', 'brute']),
-                    'leaf_size': trial.suggest_int('KNN_leaf_size', 1, 100),
-                    'p': trial.suggest_int('KNN_p', 1, 100),
-                    'metric': trial.suggest_categorical('KNN_metric',
-                                                        ['minkowski', 'euclidean', 'manhattan', 'chebyshev']),
-                    # 'n_jobs': trial.suggest_int('KNN_n_jobs', 1, 100),
-                }],
-                'Bayes(贝叶斯分类)': [
-                    AF.CustomNaiveBayes, {
-                        'classifier_type': trial.suggest_categorical('Bayes(贝叶斯分类)_classifier_type',
-                                                                        ['gaussian', 'multinomial', 'bernoulli']),
-                        'alpha': trial.suggest_float('Bayes(贝叶斯分类)_alpha', 0.0001, 0.1),
-                    }],
-                'GradientBoostingTree': [AF.GradientBoostingTree, {
-                    'n_estimators': trial.suggest_int('GradientBoostingTree_n_estimators', 1, 100),
-                    'learning_rate': trial.suggest_float('GradientBoostingTree_learning_rate', 0.01, 1.0),
-                    'max_depth': trial.suggest_int('GradientBoostingTree_max_depth', 1, 100),
-                    'random_state': trial.suggest_int('GradientBoostingTree_random_state', 1, 100),
-                }],
-                'XGBoost': [AF.XGBoost, {
-                    'n_estimators': trial.suggest_int('XGBoost_n_estimators', 1, 100),
-                    'learning_rate': trial.suggest_float('XGBoost_learning_rate', 0.01, 1.0),
-                    'max_depth': trial.suggest_int('XGBoost_max_depth', 1, 100),
-                    'subsample': trial.suggest_float('XGBoost_subsample', 0.1, 1.0),
-                    'colsample_bytree': trial.suggest_float('XGBoost_colsample_bytree', 0.1, 1.0),
-                    'random_state': trial.suggest_int('XGBoost_random_state', 1, 100),
-                }],
-
-                # 模型选择的函数和参数
-            },
-        }
-
-
-        selection_summary_5_tab2[0] = choose_random_elements(selected_outlier, 0)
-        selection_summary_5_tab2[2] = choose_random_elements(selected_data_split, 0)
-        selection_summary_5_tab2[3] = choose_random_elements(selected_preprocess, preprocess_number_input)
-        selection_summary_5_tab2[4] = choose_random_elements(selected_feat_sec, 0)
-        selection_summary_5_tab2[7] = choose_random_elements(selected_dim_red, 0)
-        selection_summary_5_tab2[5] = choose_random_elements(selected_model, 0)
-
-    
-
-
-
-
-        ## begin: 参数列表
-        # global  temp_list_to_database
-        temp_list_to_database[trial.number] = []
-        temp_list_to_database[trial.number].append([[selection_summary_5_tab2[0]],[functions_["Pretreatment"][selection_summary_5_tab2[0]][1]]])
-        temp_list_to_database[trial.number].append([[selection_summary_5_tab2[2]], [functions_["Dataset_Splitting"][selection_summary_5_tab2[2]][1]]])
-        #
-        #
-        temp_process_name = []
-        temp_process_func = []
-        for func_info in selection_summary_5_tab2[3]:
-            temp_process_name.append(func_info)
-            temp_process_func.append(functions_["Preprocess"][func_info][1])
-        temp_list_to_database[trial.number].append([temp_process_name, temp_process_func])
-        # del temp_process_name, temp_process_func
-        #
-        #
-        if selection_summary_5_tab2[4] != '':
-            temp_list_to_database[trial.number].append(
-                [[selection_summary_5_tab2[4]], [functions_["Feature_Selection"][selection_summary_5_tab2[4]][1]]])
-        else:
-            temp_list_to_database[trial.number].append([[selection_summary_5_tab2[4]], [{}]])
-
-        temp_list_to_database[trial.number].append([[selection_summary_5_tab2[7]], [functions_["Dimensionality_reduction"][selection_summary_5_tab2[7]][1]]])
-        temp_list_to_database[trial.number].append([[selection_summary_5_tab2[5]], [functions_["Model_Selection"][selection_summary_5_tab2[5]][1]]])
-        #
-
-        X_new, y_new = functions_["Pretreatment"][selection_summary_5_tab2[0]][0](X, y,
-                                                                                **functions_["Pretreatment"][
-                                                                                    selection_summary_5_tab2[0]][1])
-        X_train, X_test, y_train, y_test = functions_["Dataset_Splitting"][selection_summary_5_tab2[2]][0](X_new,
-                                                                                                                y_new,
-                                                                                                                **functions_[
-                                                                                                                    "Dataset_Splitting"][
-                                                                                                                    selection_summary_5_tab2[
-                                                                                                                        2]][
-                                                                                                                    1])
-        for func_info in selection_summary_5_tab2[3]:
-            X_train, X_test,y_train,y_test = functions_["Preprocess"][func_info][0](X_train, X_test,y_train,y_test,
-                                                                                    **functions_["Preprocess"][func_info][1])
-        X_train, X_test,y_train,y_test = functions_["Feature_Selection"][selection_summary_5_tab2[4]][0](X_train, X_test,y_train,y_test,
-                                                                                                **functions_["Feature_Selection"][
-                                                                                                    selection_summary_5_tab2[
-                                                                                                        4]][1])
-        X_train, X_test,y_train,y_test = functions_["Dimensionality_reduction"][selection_summary_5_tab2[7]][0](X_train, X_test,y_train,y_test,
-                                                                                                **functions_[
-                                                                                                    "Dimensionality_reduction"][
-                                                                                                    selection_summary_5_tab2[
-                                                                                                        7]][1])
-        y_train,y_test,y_train_pred, y_pred = functions_["Model_Selection"][selection_summary_5_tab2[5]][0](X_train, X_test,
-                                                                                                    y_train, y_test,
-                                                                                                    **functions_[
-                                                                                                        "Model_Selection"][
-                                                                                                        selection_summary_5_tab2[
-                                                                                                            5]][1])
-        y_data_to_csv[trial.number] = [y_test,y_pred]
-
-        trial.set_user_attr("y_test", y_test)
-        trial.set_user_attr("y_pred", y_pred)
-        trial.set_user_attr("y_train", y_train)
-        trial.set_user_attr("y_train_pred", y_train_pred)
-        if selected_metric in reg_metric:
-            if selected_metric == 'mae':
-                res = mean_absolute_error(y_test, y_pred)
-            elif selected_metric == 'mse':
-                res = mean_squared_error(y_test, y_pred)
-            elif selected_metric == 'r2':
-                
-                res = r2_score(y_test, y_pred)
-            elif selected_metric =='r':
-                from scipy.stats import pearsonr
-                res = pearsonr(y_test, y_pred)[0]
-            return res
-
-
-        else:
-            from sklearn.metrics import accuracy_score, precision_score, recall_score
-            if selected_metric == 'accuracy':
-                res = accuracy_score(y_test, y_pred)
-            elif selected_metric == 'precision':
-                
-                res = precision_score(y_test, y_pred,average="weighted")
-            elif selected_metric =="recall":
-                res = recall_score(y_test, y_pred,average="weighted")
-            return res
-
-
-
-    def objective(trial):
-        # sc = param_by_optuna(trial)
-        # return sc
-        try:
-            sc = param_by_optuna(trial)
-            return sc
-        except Exception as e:
-            print("An error occurred:")
-            traceback.print_exc()  # 打印完整的错误信息和堆栈跟踪
-
-
-            if selected_metric in ["accuracy", "precision", "recall",'r2','r']:
-                return 0  # 回归问题的默认值
-            else:
-                return 100000000  # 分类问题的默认值
-    # optuna.logging.set_verbosity(optuna.logging.WARNING)
-    # optuna.logging.enable_default_handler()
-    if selected_metric in ["accuracy", "precision", "recall",'r2','r']:
-        direction ='maximize'
-    else:
-        # 否则，默认为最小化目标，例如MAE、MSE或R2
-        direction = 'minimize'
-    optuna.logging.set_verbosity(optuna.logging.DEBUG) 
-    study = optuna.create_study(direction=direction)
-    study.optimize(objective,n_trials=chose_n_trails)
-    print(str(temp_list_to_database[study.best_trial.number]))
-
-    
-    # train_test_scatter(study.best_trial.user_attrs['y_train'],study.best_trial.user_attrs['y_train_pred'],study.best_trial.user_attrs['y_test'],study.best_trial.user_attrs['y_pred'],category=save_name,save = save)
-    
-
-
-
-def run_optuna_v3(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=None,save=None,save_name= "",**kw):
     # 2024-10-10
     # 光谱数据的自动调参函数，可以自动调整选用建模过程中的哪些方法，参数。
     # V3版本增加了允许传入已经划分好的X_train,X_test,y_train,y_test,如果splited_data传了，就不用传X,y了。
@@ -1797,10 +964,17 @@ def run_optuna_v3(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=N
         selected_metric:example: 'mae'  ---   ['mae','mse','r2','r',"accuracy", "precision", "recall"] Selecting metrics for Optuna hyperparameter tuning.  
         save: save_path  example: "./data/"
         save_name: save_name  example: "test"
-        kw: example: {"selected_outlier":["不做异常值去除","mahalanobis"] ,"selected_data_split":["random_split"],"selected_preprocess":["不做预处理","mean_centering","snv"],"selected_feat_sec":["不做特征选择"]}   --  Fill in the model dictionary included in the hyperparameter tuning
+        kw: example: {"selected_outlier":["不做异常值去除","mahalanobis"] ,
+                       "selected_data_split":["random_split"],
+                       "selected_preprocess":["不做预处理","mean_centering","snv"],
+                       "selected_feat_sec":["不做特征选择"]}   --  Fill in the model dictionary included in the hyperparameter tuning
     """
 
     import random
+    warnings.warn("此函数已废弃，将于2024-12-23被删除，请使用run_optuna_v4函数替代", DeprecationWarning, stacklevel=2)
+    time.sleep(10)
+
+    
 
 
 
@@ -1838,6 +1012,7 @@ def run_optuna_v3(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=N
     # 在选择回归任务时，提供回归模型的选择
     if isReg:
         model_options = ['LR', 'SVR','PLSR', 'Bayes(贝叶斯回归)','RFR(随机森林回归)']
+        # model_options = ['BayesianRidge']
     else:
         # 在选择分类任务时，提供分类模型的选择
         model_options = ['LogisticRegression','SVM','DT','RandomForest','KNN','Bayes(贝叶斯分类)',"GradientBoostingTree","XGBoost"]
@@ -1849,38 +1024,45 @@ def run_optuna_v3(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=N
     ##################################                     设置调参使用哪些参数               begin     #################################################
     ####################################################################################################################################################
     ## 选择异常值去除的选项
-    selected_outlier = ["mahalanobis"]
+    selected_outlier = ["不做异常值去除","mahalanobis"]
+    selected_data_split = [ "custom_train_test_split"]
+    data_split_ratio  = 0.25
+    selected_preprocess = ["不做预处理", "mean_centering", "normalization", "standardization", "poly_detrend", "snv", "savgol", "msc","d1", "d2", "rnv", "move_avg"]
+    preprocess_number_input = 3
+    selected_feat_sec = ["不做特征选择"]
+    selected_dim_red = ["不做降维"]
+
+
+    
+    # selected_outlier = ["不做异常值去除","mahalanobis"]
+    # selected_data_split = [ "custom_train_test_split"]
+    # data_split_ratio  = 0.25
+    # selected_preprocess = ["snv"]
+    # preprocess_number_input = 1
+    # selected_feat_sec = ["不做特征选择"]
+    # selected_dim_red = ["不做降维"]
+
+    
+    
+
     if "selected_outlier" in kw.keys():
         selected_outlier = kw["selected_outlier"]
-    # 选择数据拆分的选项
-    selected_data_split = [ "custom_train_test_split"]
     if "selected_data_split" in kw.keys():
-        selected_data_split = kw["selected_data_split"]
-    data_split_ratio  = 0.3
-
-    #选择预处理的选项
-    selected_preprocess = ["不做预处理", "mean_centering", "normalization", "standardization", "poly_detrend", "snv", "savgol", "msc","d1", "d2", "rnv", "move_avg"]
+        selected_data_split = kw["selected_data_split","random_split"]
     if "selected_preprocess" in kw.keys():
         selected_preprocess = kw["selected_preprocess"]
-    preprocess_number_input = 3
-
-
-    #选择特征选择的选项")
-    selected_feat_sec = ["不做特征选择"]
     if "selected_feat_sec" in kw.keys():
         selected_feat_sec = kw["selected_feat_sec"]
-    #选择降维的选项")
-    selected_dim_red = ["不做降维"]
     if "selected_dim_red" in kw.keys():
         selected_dim_red = kw["selected_dim_red"]
-    #选择参与调参的模型")
     selected_model = model_options
     if "selected_model" in kw.keys():
         selected_model = kw["selected_model"]
-    #选择以那种指标进行调参")
     reg_metric = ["mae", "mse", "r2",'r']
     classification_metric = ["accuracy", "precision", "recall"]
     selected_metric = selected_metric
+
+
 
     # 调参次数
     ####################################################################################################################################################
@@ -1891,7 +1073,7 @@ def run_optuna_v3(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=N
 
 
 
-
+ 
 
     def param_by_optuna(trial):
         # 命名规则： {类别名：{方法名：[方法函数（对象）,{参数名: trainl对象（名称为:函数名_参数名） }]}}
@@ -1990,6 +1172,16 @@ def run_optuna_v3(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=N
                                                 # 'ccp_alpha': trial.suggest_float('RFR(随机森林回归)_ccp_alpha', 0.0001, 0.1),
                                                 # 'max_samples': (trial.suggest_float('RFR(随机森林回归)_max_samples', 0.1, 1.0) if trial.params['RFR(随机森林回归)_bootstrap'] else None)
                                                 }],
+                'BayesianRidge': [AF.BayesianRidge, {
+                                                'alpha_1': trial.suggest_float("BR_alpha_1", 1e-10, 10.0, log=True),
+                                                'alpha_2': trial.suggest_float("BR_alpha_2", 1e-10, 10.0, log=True),
+                                                'lambda_1': trial.suggest_float("BR_lambda_1", 1e-10, 10.0, log=True),
+                                                'lambda_2': trial.suggest_float("BR_lambda_2", 1e-10, 10.0, log=True),
+                                                'tol': trial.suggest_float("BR_tol", 1e-6, 1e-1, log=True),
+                                                'fit_intercept': trial.suggest_categorical("BR_fit_intercept", [True, False]),
+                                            }],
+
+
                 'LogisticRegression':[AF.logr,{}],
                 'SVM': [AF.SVM, {
                         'kernel': trial.suggest_categorical('SVM_kernel', ['linear', 'poly', 'rbf', 'sigmoid']),
@@ -2011,22 +1203,10 @@ def run_optuna_v3(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=N
                     'n_estimators': trial.suggest_int('RandomForest_n_estimators', 1, 100),
                     'criterion': trial.suggest_categorical('RandomForest_criterion',
                                                             ["entropy", "gini", "log_loss"]),
-                    # 'max_depth': trial.suggest_int('RandomForest_max_depth', 1, 100),
                     'min_samples_split': trial.suggest_int('RandomForest_min_samples_split', 1, 100),
                     'min_samples_leaf': trial.suggest_int('RandomForest_min_samples_leaf', 1, 100),
-                    # 'min_weight_fraction_leaf': trial.suggest_float('RandomForest_min_weight_fraction_leaf', 0.0001, 0.1),
-                    # 'max_features': trial.suggest_float('RandomForest_max_features', 0.1,1.0),
-                    # 'max_leaf_nodes': trial.suggest_int('RandomForest_max_leaf_nodes', 1, 100),
-                    # 'min_impurity_decrease': trial.suggest_float('RandomForest_min_impurity_decrease', 0.0001, 0.1),
-                    # 'bootstrap': trial.suggest_categorical('RandomForest_bootstrap', [True, False]),
-                    # 'oob_score': trial.suggest_categorical('RandomForest_oob_score', [True, False]),
-                    # 'n_jobs': trial.suggest_int('RandomForest_n_jobs', 1, 100),
                     'random_state': trial.suggest_int('RandomForest_random_state', 1, 100),
-                    # 'verbose': trial.suggest_int('RandomForest_verbose', 0, 100),
-                    # 'warm_start': trial.suggest_categorical('RandomForest_warm_start', [True, False]),
-                    # 'ccp_alpha': trial.suggest_float('RandomForest_ccp_alpha', 0.0001, 0.1),
-                    # 'max_samples': (trial.suggest_float('RandomForest_max_samples', 0.1, 1.0) if trial.params['RandomForest_bootstrap'] else None)
-                }],
+                    }],
                 'KNN': [AF.KNN, {
                     'n_neighbors': trial.suggest_int('KNN_n_neighbors', 1, 100),
                     'weights': trial.suggest_categorical('KNN_weights', ['uniform', 'distance']),
@@ -2036,7 +1216,6 @@ def run_optuna_v3(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=N
                     'p': trial.suggest_int('KNN_p', 1, 100),
                     'metric': trial.suggest_categorical('KNN_metric',
                                                         ['minkowski', 'euclidean', 'manhattan', 'chebyshev']),
-                    # 'n_jobs': trial.suggest_int('KNN_n_jobs', 1, 100),
                 }],
                 'Bayes(贝叶斯分类)': [
                     AF.CustomNaiveBayes, {
@@ -2196,13 +1375,1026 @@ def run_optuna_v3(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=N
     optuna.logging.set_verbosity(optuna.logging.DEBUG) 
     study = optuna.create_study(direction=direction)
     study.optimize(objective,n_trials=chose_n_trails)
+    print(study.best_value)
     print(str(temp_list_to_database[study.best_trial.number]))
-    return str(temp_list_to_database[study.best_trial.number])
+    return str(temp_list_to_database[study.best_trial.number]),study.best_value
+
+
+def run_optuna_v4(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=None,save=None,save_name= "",**kw):
+    # 2024-10-23
+    # 光谱数据的自动调参函数，可以自动调整选用建模过程中的哪些方法，参数。
+    # V4版本增加了交叉验证的功能
+    # V3版本增加了允许传入已经划分好的X_train,X_test,y_train,y_test,如果splited_data传了，就不用传X,y了。
+    # 相比于v1版本，v2版本增加（1）对分类任务的支持优化（2）增加了划分数据的方法 (3)增加了验证集，最终输出的是基于测试集的指标
+    
+    """
+    功能：这是一个基于Optuna框架的自动化光谱数据建模函数，它能够自动选择和优化从数据预处理到模型训练的整个流程（包括异常值处理、数据集划分、特征选择、降维等步骤），支持多种回归和分类模型，通过5折交叉验证来评估模型性能，最终输出最优的参数组合和模型结果，是一个全面的自动化建模工具。
+    -----
+    params
+    -----
+        -  
+        - X: np.array 2-D
+        - y: np.array 1-D
+        - isReg: if it is a reg task, then True
+        - chose_n_trails: Optuna tuning iterations
+        - selected_metric:example: 'mae'  ---   ['mae','mse','r2','r',"accuracy", "precision", "recall"] Selecting metrics for Optuna hyperparameter tuning.  
+        - save: save_path  example: "./data/"
+        - save_name: save_name  example: "test"
+        - kw: example: {"selected_outlier":["不做异常值去除","mahalanobis"] ,
+                       "selected_data_split":["random_split"],
+                       "selected_preprocess":["不做预处理","mean_centering","snv"],
+                       "selected_feat_sec":["不做特征选择"]}   --  Fill in the model dictionary included in the hyperparameter tuning
+
+    -----
+    example
+    -----
+        # 回归任务
+        import numpy as np
+        from sklearn.datasets import make_regression
+
+        # 1. 生成示例数据
+        X, y = make_regression(n_samples=500, n_features=100, noise=0.1, random_state=42)
+
+        # 2. 配置参数
+        params = {
+            "selected_outlier": ["不做异常值去除", "mahalanobis"],  # 选择异常值处理方法
+            "selected_preprocess": ["不做预处理", "mean_centering", "normalization", "standardization", "poly_detrend", "snv", "savgol", "msc","d1", "d2", "rnv", "move_avg"],  # 选择预处理方法 
+            "selected_feat_sec": ["不做特征选择"],  # 选择特征选择方法
+            "selected_model":  ['LR', 'SVR','PLSR', 'Bayes(贝叶斯回归)','RFR(随机森林回归)','BayesianRidge'] 
+        }
+
+        # 3. 运行自动建模
+        results = run_optuna_v4(
+            X=X,  # 输入特征矩阵 
+            y=y,  # 目标变量
+            isReg=True,  # 这是一个回归任务
+            chose_n_trails=20,  # 尝试20次不同的参数组合
+            selected_metric='r2',  # 使用R2作为评估指标
+            save=None,  # 不保存结果
+            save_name="",  # 不指定保存名称
+            **params  # 传入上面配置的参数
+        )
+
+        # 4. 使用预先划分好的数据集的情况
+        from sklearn.model_selection import train_test_split
+
+        # 预先划分数据集
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        splited_data = (X_train, X_test, y_train, y_test)
+
+        # 使用预先划分的数据集运行
+        results_with_split = run_optuna_v4(
+            X=None,  # 当使用splited_data时,X可以为None
+            y=None,  # 当使用splited_data时,y可以为None
+            isReg=True,
+            chose_n_trails=20,
+            selected_metric='r2',
+            splited_data=splited_data,  # 传入预先划分好的数据集
+            **params
+        )
+    -----
 
     
-    # train_test_scatter(study.best_trial.user_attrs['y_train'],study.best_trial.user_attrs['y_train_pred'],study.best_trial.user_attrs['y_test'],study.best_trial.user_attrs['y_pred'],category=save_name,save = save)
-    
+    """
 
+    import random
+    import numpy as np
+    import optuna
+    from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+    from sklearn.model_selection import KFold
+    import traceback
+
+    def choose_random_elements(my_list, num_elements):
+        """从函数列表中随机选择一定数量的函数
+        Parameters
+        ----------
+        my_list : list
+            函数列表,其中的元素是函数名，字符串类型，如["snv", "msc"]
+        num_elements: int
+            选择的函数数量, 0选择其中一个, 其他值表示根据值随机可重复组合
+        Returns
+        -------
+        str or list
+            如果只有一个元素，返回的是字符串，否则返回的是列表
+        ------
+        """
+        if num_elements == 0:
+            return random.choice(my_list)
+        else:
+            return random.choices(my_list, k=num_elements)
+
+    # 修改数据
+    #################################################################################################################################################
+    # 获得光谱数据和标签
+    X = X
+    y = y
+    isReg = isReg
+    #################################################################################################################################################
+
+    # 一个列表，用于存储每次调参的模型
+    selection_summary_5_tab2 = [0 for i in range(8)]
+    # 在选择回归任务时，提供回归模型的选择
+    if isReg:
+        model_options = ['LR', 'SVR','PLSR', 'Bayes(贝叶斯回归)','RFR(随机森林回归)','BayesianRidge']
+    else:
+        # 在选择分类任务时，提供分类模型的选择
+        model_options = ['LogisticRegression','SVM','DT','RandomForest','KNN','Bayes(贝叶斯分类)',"GradientBoostingTree","XGBoost"]
+
+    temp_list_to_database = {}
+    y_data_to_csv = {}
+
+    ####################################################################################################################################################
+    ##################################                     设置调参使用哪些参数               begin     #################################################
+    ####################################################################################################################################################
+    ## 选择异常值去除的选项
+    selected_outlier = ["不做异常值去除","mahalanobis"]
+    selected_data_split = [ "custom_train_test_split"]
+    data_split_ratio  = 0.25
+    selected_preprocess = ["不做预处理", "mean_centering", "normalization", "standardization", "poly_detrend", "snv", "savgol", "msc","d1", "d2", "rnv", "move_avg"]
+    preprocess_number_input = 3
+    selected_feat_sec = ["不做特征选择"]
+    selected_dim_red = ["不做降维"]
+
+    if "selected_outlier" in kw.keys():
+        selected_outlier = kw["selected_outlier"]
+    if "selected_data_split" in kw.keys():
+        selected_data_split = kw["selected_data_split"]
+    if "selected_preprocess" in kw.keys():
+        selected_preprocess = kw["selected_preprocess"]
+    if "selected_feat_sec" in kw.keys():
+        selected_feat_sec = kw["selected_feat_sec"]
+    if "selected_dim_red" in kw.keys():
+        selected_dim_red = kw["selected_dim_red"]
+    selected_model = model_options
+    if "selected_model" in kw.keys():
+        selected_model = kw["selected_model"]
+    reg_metric = ["mae", "mse", "r2",'r']
+    classification_metric = ["accuracy", "precision", "recall"]
+    selected_metric = selected_metric
+
+    def param_by_optuna(trial):
+        functions_ = {
+            'Pretreatment': {
+                '不做异常值去除': [AF.return_inputs, {}],
+                'mahalanobis':
+                    [AF.mahalanobis, {'threshold': trial.suggest_int('mahalanobis_threshold', 1, 100)}],
+            },
+            'Dataset_Splitting': {
+                'random_split': [AF.random_split, {'test_size': trial.suggest_float('random_split_test_size', 0.1, 0.9) if data_split_ratio == 0 else data_split_ratio,
+                                                    'random_seed':  trial.suggest_int('random_split_random_seed', 0, 100)   }],
+                'custom_train_test_split':[AF.custom_train_test_split , {'test_size': trial.suggest_float('custom_train_test_split_test_size', 0.1, 0.9) if data_split_ratio == 0 else data_split_ratio,
+                                                                            'method': trial.suggest_categorical('custom_train_test_split_method', ['KS', 'SPXY'])}],
+                            },
+            'Preprocess': {
+                '不做预处理': [AF.return_inputs, {}],
+                'mean_centering': [AF.mean_centering, {'axis':trial.suggest_categorical('mean_centering_axis',[None,0,1])}],
+                'normalization': [AF.normalization,
+                                    {'axis': trial.suggest_categorical('normalization_axis', [None,0,1])}],
+                'standardization': [AF.standardization,
+                                    {'axis': trial.suggest_categorical('standardization_axis', [None,0,1])}],
+                'poly_detrend': [AF.poly_detrend,   {'poly_order': trial.suggest_int('poly_detrend_poly_order', 2, 4)}],
+                'snv': [AF.snv, {}],
+                'savgol':[AF.savgol,{
+                    'window_len':trial.suggest_int('savgol_window_len',1,100),
+                    'poly':trial.suggest_int('savgol_poly',0,trial.params['savgol_window_len']-1),
+                    'deriv':trial.suggest_int('savgol_deriv',0,2),
+                }],
+                'msc': [AF.msc, {'mean_center': trial.suggest_categorical('msc_mean_center', [True, False])}],
+                'd1':[AF.d1, {}],
+                'd2':[AF.d2, {}],
+                'rnv':[AF.rnv, {'percent' : trial.suggest_int('rnv_percent', 1, 100)}],
+                'move_avg':[AF.move_avg, {'window_size': trial.suggest_int('move_avg_window_size', 3, 399, step=2)}],
+                'baseline_iarpls':[AF.baseline_iarpls, {'lam': trial.suggest_int('baseline_iarpls_lam', 1, 300, step=1)}],
+                'baseline_airpls':[AF.baseline_airpls, {'lam': trial.suggest_int('baseline_airpls_lam',1, 300, step=1)}],
+                'baseline_derpsalsa':[AF.baseline_derpsalsa, {'lam': trial.suggest_int('baseline_derpsalsa_lam', 1, 300, step=1)}],
+
+            },
+            "Feature_Selection": {
+                '不做特征选择': [AF.return_inputs, {}],
+                'cars': [AF.cars, {'n_sample_runs': trial.suggest_int('cars_n_sample_runs', 10, 1000),
+                                    'pls_components': trial.suggest_int('cars_pls_components', 1, 20),
+                                    'n_cv_folds': trial.suggest_int('cars_n_cv_folds', 1, 10)}],
+                'spa': [AF.spa, {'i_init': trial.suggest_int('spa_i_init', 0, 100),
+                                    'method': trial.suggest_categorical('spa_method', [0, 1]),
+                                    'mean_center': trial.suggest_categorical('spa_mean_center', [True, False])}],
+                'corr_coefficient': [AF.corr_coefficient, {'threshold': trial.suggest_float('corr_coefficient_threshold', 0.0, 1.0)}],
+                'anova': [AF.anova, {
+                    'threshold': trial.suggest_float('anova_threshold', 0.0, 1.0)}],
+                'fipls': [AF.fipls, {'n_intervals': trial.suggest_int('fipls_n_intervals', 1, 5),
+                                    'interval_width': trial.suggest_float('fipls_interval_width', 10, 500),
+                                    'n_comp': trial.suggest_int('fipls_n_comp', 2, 20)}]
+            },
+
+            'Dimensionality_reduction': {
+                '不做降维': [AF.return_inputs, {}],
+                'pca': [AF.pca, {'n_components': trial.suggest_int('pca_n_components', 1, 50)}],
+            },
+
+
+            'Model_Selection': {
+                'LR': [AF.LR, {}],
+                'SVR': [AF.SVR,
+                            {'kernel': trial.suggest_categorical('SVR_kernel', ['linear', 'poly', 'rbf', 'sigmoid']),
+                                'C': trial.suggest_float("SVR_c", 1e-5, 1000, log=True),
+                                'epsilon': trial.suggest_float('SVR_epsilon', 0.01, 1, log=True),
+                                'degree': trial.suggest_int('SVR_degree', 1, 5),
+                                'gamma': trial.suggest_float("SVR_gamma", 1e-5, 1000, log=True)}],
+                'PLSR': [AF.PLSR, {'n_components': trial.suggest_int('PLSR_n_components', 1, 20),
+                                    'scale': trial.suggest_categorical('PLSR_scale', [True, False])}],
+                'Bayes(贝叶斯回归)': [AF.bayes, {
+                                                    'tol': trial.suggest_float('Bayes(贝叶斯回归)_tol', 0.0001, 0.1),
+                                                    'alpha_1': trial.suggest_float('Bayes(贝叶斯回归)_alpha_1', 0.0001, 0.1),
+                                                    'alpha_2': trial.suggest_float('Bayes(贝叶斯回归)_alpha_2', 0.0001, 0.1),
+                                                    'lambda_1': trial.suggest_float('Bayes(贝叶斯回归)_lambda_1', 0.0001, 0.1),
+                                                    'lambda_2': trial.suggest_float('Bayes(贝叶斯回归)_lambda_2', 0.0001, 0.1),
+                                                    'compute_score': trial.suggest_categorical('Bayes(贝叶斯回归)_compute_score', [True, False]),
+                                                    'fit_intercept': trial.suggest_categorical('Bayes(贝叶斯回归)_fit_intercept', [True, False])}],
+                'RFR(随机森林回归)': [AF.RFR, {'n_estimators': trial.suggest_int('RFR(随机森林回归)_n_estimators', 1, 100),
+                                                'criterion': trial.suggest_categorical('RFR(随机森林回归)_criterion', ["squared_error", "absolute_error", "friedman_mse", "poisson"]),
+                                                # 'max_depth': trial.suggest_int('RFR(随机森林回归)_max_depth', 1, 100),
+                                                'min_samples_split': trial.suggest_int('RFR(随机森林回归)_min_samples_split', 1, 100),
+                                                'min_samples_leaf': trial.suggest_int('RFR(随机森林回归)_min_samples_leaf', 1, 100),
+                                                'min_weight_fraction_leaf': trial.suggest_float('RFR(随机森林回归)_min_weight_fraction_leaf', 0.0001, 0.1),
+                                                'max_features': trial.suggest_float('RFR(随机森林回归)_max_features', 0.1,1.0),
+                                                # 'max_leaf_nodes': trial.suggest_int('RFR(随机森林回归)_max_leaf_nodes', 1, 100),
+                                                # 'min_impurity_decrease': trial.suggest_float('RFR(随机森林回归)_min_impurity_decrease', 0.0001, 0.1),
+                                                # 'bootstrap': trial.suggest_categorical('RFR(随机森林回归)_bootstrap', [True, False]),
+                                                # 'oob_score': trial.suggest_categorical('RFR(随机森林回归)_oob_score', [True, False]),
+                                                # 'n_jobs': trial.suggest_int('RFR(随机森林回归)_n_jobs', 1, 100),
+                                                'random_state': trial.suggest_int('RFR(随机森林回归)_random_state', 1, 100),
+                                                # 'verbose': trial.suggest_int('RFR(随机森林回归)_verbose', 0, 100),
+                                                # 'warm_start': trial.suggest_categorical('RFR(随机森林回归)_warm_start', [True, False]),
+                                                # 'ccp_alpha': trial.suggest_float('RFR(随机森林回归)_ccp_alpha', 0.0001, 0.1),
+                                                # 'max_samples': (trial.suggest_float('RFR(随机森林回归)_max_samples', 0.1, 1.0) if trial.params['RFR(随机森林回归)_bootstrap'] else None)
+                                                }],
+                'BayesianRidge': [AF.BayesianRidge, {
+                                                'alpha_1': trial.suggest_float("BR_alpha_1", 1e-10, 10.0, log=True),
+                                                'alpha_2': trial.suggest_float("BR_alpha_2", 1e-10, 10.0, log=True),
+                                                'lambda_1': trial.suggest_float("BR_lambda_1", 1e-10, 10.0, log=True),
+                                                'lambda_2': trial.suggest_float("BR_lambda_2", 1e-10, 10.0, log=True),
+                                                'tol': trial.suggest_float("BR_tol", 1e-6, 1e-1, log=True),
+                                                'fit_intercept': trial.suggest_categorical("BR_fit_intercept", [True, False]),
+                                            }],
+
+
+                'LogisticRegression':[AF.logr,{}],
+                'SVM': [AF.SVM, {
+                        'kernel': trial.suggest_categorical('SVM_kernel', ['linear', 'poly', 'rbf', 'sigmoid']),
+                        'C': trial.suggest_float("SVM_C", 1e-5, 1000, log=True),
+                        'degree': trial.suggest_int('SVM_degree', 1, 5),
+                        'gamma': trial.suggest_float("SVM_gamma", 1e-5, 1000, log=True),
+                        # 'coef0': trial.suggest_float('SVM_coef0', 0.01, 100),
+                        'random_state': trial.suggest_int('SVM_random_state', 1, 100),
+                    }],
+                'DT': [AF.DT, {
+                    'criterion': trial.suggest_categorical('DT_criterion', ["gini", "entropy", "log_loss"]),
+                    'splitter': trial.suggest_categorical('DT_splitter', ["best", "random"]),
+                    'min_samples_split': trial.suggest_int('DT_min_samples_split', 2, 100),
+                    'min_samples_leaf': trial.suggest_int('DT_min_samples_leaf', 1, 100),
+                    # 'max_features': trial.suggest_float('DT_max_features', 0.1, 1.0),
+                    'random_state': trial.suggest_int('DT_random_state', 1, 100),
+                }],
+                'RandomForest': [AF.RandomForest, {
+                    'n_estimators': trial.suggest_int('RandomForest_n_estimators', 1, 100),
+                    'criterion': trial.suggest_categorical('RandomForest_criterion',
+                                                            ["entropy", "gini", "log_loss"]),
+                    'min_samples_split': trial.suggest_int('RandomForest_min_samples_split', 1, 100),
+                    'min_samples_leaf': trial.suggest_int('RandomForest_min_samples_leaf', 1, 100),
+                    'random_state': trial.suggest_int('RandomForest_random_state', 1, 100),
+                    }],
+                'KNN': [AF.KNN, {
+                    'n_neighbors': trial.suggest_int('KNN_n_neighbors', 1, 100),
+                    'weights': trial.suggest_categorical('KNN_weights', ['uniform', 'distance']),
+                    'algorithm': trial.suggest_categorical('KNN_algorithm',
+                                                            ['auto', 'ball_tree', 'kd_tree', 'brute']),
+                    'leaf_size': trial.suggest_int('KNN_leaf_size', 1, 100),
+                    'p': trial.suggest_int('KNN_p', 1, 100),
+                    'metric': trial.suggest_categorical('KNN_metric',
+                                                        ['minkowski', 'euclidean', 'manhattan', 'chebyshev']),
+                }],
+                'Bayes(贝叶斯分类)': [
+                    AF.CustomNaiveBayes, {
+                        'classifier_type': trial.suggest_categorical('Bayes(贝叶斯分类)_classifier_type',
+                                                                        ['gaussian', 'multinomial', 'bernoulli']),
+                        'alpha': trial.suggest_float('Bayes(贝叶斯分类)_alpha', 0.0001, 0.1),
+                    }],
+                'GradientBoostingTree': [AF.GradientBoostingTree, {
+                    'n_estimators': trial.suggest_int('GradientBoostingTree_n_estimators', 1, 100),
+                    'learning_rate': trial.suggest_float('GradientBoostingTree_learning_rate', 0.01, 1.0),
+                    'max_depth': trial.suggest_int('GradientBoostingTree_max_depth', 1, 100),
+                    'random_state': trial.suggest_int('GradientBoostingTree_random_state', 1, 100),
+                }],
+                'XGBoost': [AF.XGBoost, {
+                    'n_estimators': trial.suggest_int('XGBoost_n_estimators', 1, 100),
+                    'learning_rate': trial.suggest_float('XGBoost_learning_rate', 0.01, 1.0),
+                    'max_depth': trial.suggest_int('XGBoost_max_depth', 1, 100),
+                    'subsample': trial.suggest_float('XGBoost_subsample', 0.1, 1.0),
+                    'colsample_bytree': trial.suggest_float('XGBoost_colsample_bytree', 0.1, 1.0),
+                    'random_state': trial.suggest_int('XGBoost_random_state', 1, 100),
+                }],
+
+                # 模型选择的函数和参数
+            },
+        }
+        
+        selection_summary_5_tab2[0] = choose_random_elements(selected_outlier, 0)
+        selection_summary_5_tab2[2] = choose_random_elements(selected_data_split, 0)
+        selection_summary_5_tab2[3] = choose_random_elements(selected_preprocess, preprocess_number_input)
+        selection_summary_5_tab2[4] = choose_random_elements(selected_feat_sec, 0)
+        selection_summary_5_tab2[7] = choose_random_elements(selected_dim_red, 0)
+        selection_summary_5_tab2[5] = choose_random_elements(selected_model, 0)
+
+        temp_list_to_database[trial.number] = []
+        temp_list_to_database[trial.number].append([[selection_summary_5_tab2[0]],[functions_["Pretreatment"][selection_summary_5_tab2[0]][1]]])
+        temp_list_to_database[trial.number].append([[selection_summary_5_tab2[2]], [functions_["Dataset_Splitting"][selection_summary_5_tab2[2]][1]]])
+        
+        temp_process_name = []
+        temp_process_func = []
+        for func_info in selection_summary_5_tab2[3]:
+            temp_process_name.append(func_info)
+            temp_process_func.append(functions_["Preprocess"][func_info][1])
+        temp_list_to_database[trial.number].append([temp_process_name, temp_process_func])
+        
+        if selection_summary_5_tab2[4] != '':
+            temp_list_to_database[trial.number].append([[selection_summary_5_tab2[4]], [functions_["Feature_Selection"][selection_summary_5_tab2[4]][1]]])
+        else:
+            temp_list_to_database[trial.number].append([[selection_summary_5_tab2[4]], [{}]])
+
+        temp_list_to_database[trial.number].append([[selection_summary_5_tab2[7]], [functions_["Dimensionality_reduction"][selection_summary_5_tab2[7]][1]]])
+        temp_list_to_database[trial.number].append([[selection_summary_5_tab2[5]], [functions_["Model_Selection"][selection_summary_5_tab2[5]][1]]])
+
+        if splited_data is None:
+            X_new, y_new = functions_["Pretreatment"][selection_summary_5_tab2[0]][0](X, y,
+                                                                                **functions_["Pretreatment"][
+                                                                                    selection_summary_5_tab2[0]][1])
+            X_train, X_test, y_train, y_test = functions_["Dataset_Splitting"][selection_summary_5_tab2[2]][0](X_new,
+                                                                                                                y_new,
+                                                                                                                **functions_[
+                                                                                                                    "Dataset_Splitting"][
+                                                                                                                    selection_summary_5_tab2[
+                                                                                                                        2]][
+                                                                                                                    1])
+        else:
+            X_train, X_test, y_train, y_test = splited_data
+
+        # 应用预处理
+        for func_info in selection_summary_5_tab2[3]:
+            X_train, X_test, y_train, y_test = functions_["Preprocess"][func_info][0](X_train, X_test, y_train, y_test,
+                                                                                    **functions_["Preprocess"][func_info][1])
+        
+        # 特征选择
+        X_train, X_test, y_train, y_test = functions_["Feature_Selection"][selection_summary_5_tab2[4]][0](X_train, X_test, y_train, y_test,
+                                                                                                **functions_["Feature_Selection"][
+                                                                                                    selection_summary_5_tab2[4]][1])
+        
+        # 降维
+        X_train, X_test, y_train, y_test = functions_["Dimensionality_reduction"][selection_summary_5_tab2[7]][0](X_train, X_test, y_train, y_test,
+                                                                                                **functions_["Dimensionality_reduction"][
+                                                                                                    selection_summary_5_tab2[7]][1])
+
+        # 添加交叉验证
+        n_splits = 5  # 5折交叉验证
+        kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+        cv_scores = []
+        
+        # 在训练集上进行交叉验证
+        for train_idx, val_idx in kf.split(X_train):
+            X_train_fold, X_val_fold = X_train[train_idx], X_train[val_idx]
+            y_train_fold, y_val_fold = y_train[train_idx], y_train[val_idx]
+            
+            _, _, y_train_fold_pred, y_val_fold_pred = functions_["Model_Selection"][selection_summary_5_tab2[5]][0](
+                X_train_fold, X_val_fold, y_train_fold, y_val_fold,
+                **functions_["Model_Selection"][selection_summary_5_tab2[5]][1]
+            )
+            
+            # 计算验证集上的性能
+            if selected_metric in reg_metric:
+                if selected_metric == 'mae':
+                    fold_score = mean_absolute_error(y_val_fold, y_val_fold_pred)
+                elif selected_metric == 'mse':
+                    fold_score = mean_squared_error(y_val_fold, y_val_fold_pred)
+                elif selected_metric == 'r2':
+                    fold_score = r2_score(y_val_fold, y_val_fold_pred)
+                elif selected_metric == 'r':
+                    from scipy.stats import pearsonr
+                    fold_score = pearsonr(y_val_fold, y_val_fold_pred)[0]
+            else:
+                from sklearn.metrics import accuracy_score, precision_score, recall_score
+                if selected_metric == 'accuracy':
+                    fold_score = accuracy_score(y_val_fold, y_val_fold_pred)
+                elif selected_metric == 'precision':
+                    fold_score = precision_score(y_val_fold, y_val_fold_pred, average="weighted")
+                elif selected_metric == "recall":
+                    fold_score = recall_score(y_val_fold, y_val_fold_pred, average="weighted")
+            
+            cv_scores.append(fold_score)
+
+        # 在完整训练集上训练最终模型并评估测试集性能
+        y_train, y_test, y_train_pred, y_pred = functions_["Model_Selection"][selection_summary_5_tab2[5]][0](
+            X_train, X_test, y_train, y_test,
+            **functions_["Model_Selection"][selection_summary_5_tab2[5]][1]
+        )
+
+        y_data_to_csv[trial.number] = [y_test, y_pred]
+        
+        # 保存结果到trial
+        trial.set_user_attr("y_test", y_test)
+        trial.set_user_attr("y_pred", y_pred)
+        trial.set_user_attr("y_train", y_train)
+        trial.set_user_attr("y_train_pred", y_train_pred)
+        trial.set_user_attr("cv_scores", cv_scores)
+        trial.set_user_attr("cv_score_mean", np.mean(cv_scores))
+        trial.set_user_attr("cv_score_std", np.std(cv_scores))
+        
+        # 返回交叉验证的平均分数
+        return np.mean(cv_scores)
+
+
+def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='r', save=None, save_name="", **kw):
+    # 2024-10-31 V5版本
+    # 光谱数据的自动调参函数，可以自动调整选用建模过程中的哪些方法，参数。
+    # V5版本不再支持随机划分数据，改为支持多数据集输入（一个训练多个测试），使用所有数据集的均值作为评估指标，修改了结果输出的格式，现在为保存json文件。
+    # V4版本增加了交叉验证的功能
+    # V3版本增加了允许传入已经划分好的X_train,X_test,y_train,y_test,如果splited_data传了，就不用传X,y了。
+    # 相比于v1版本，v2版本增加（1）对分类任务的支持优化（2）增加了划分数据的方法 (3)增加了验证集，最终输出的是基于测试集的指标
+    """
+    光谱数据的自动调参函数，支持多数据集验证。可以自动调整选用建模过程中的哪些方法和参数。
+    
+    Parameters
+    ----------
+    data_dict : dict
+        包含多个数据集的字典, 格式为 {'dataset1': (X1, y1), 'dataset2': (X2, y2), ...}
+        其中每个数据集都是一个元组 (X, y), X 是特征矩阵, y 是目标变量
+    train_key : str
+        用于训练的数据集的键值
+    isReg : bool
+        是否为回归任务
+    chose_n_trails : int
+        Optuna调参迭代次数
+    selected_metric : str
+        选择的评估指标, 支持 ['mae','mse','r2','r',"accuracy", "precision", "recall"]
+    save : str, optional
+        保存路径
+    save_name : str, optional
+        保存文件名
+    **kw : dict
+        其他参数，包括可选择的预处理方法等
+
+    Returns
+    -------
+    dict
+        包含最优模型在所有数据集上的预测结果和评估指标
+
+    -------
+    Example
+    -------
+        import numpy as np
+        from sklearn.datasets import make_regression, make_classification
+        from sklearn.preprocessing import StandardScaler
+        import matplotlib.pyplot as plt
+
+        def create_test_datasets(task='regression', n_features=20, noise_levels=[0.1, 0.2, 0.3]):
+            np.random.seed(42)
+            data_dict = {}
+            
+            # 创建训练集
+            if task == 'regression':
+                X_train, y_train = make_regression(
+                    n_samples=100,
+                    n_features=n_features,
+                    noise=0.1,
+                    random_state=42
+                )
+            else:
+                X_train, y_train = make_classification(
+                    n_samples=100,
+                    n_features=n_features,
+                    n_classes=2,
+                    random_state=42
+                )
+            
+            # 标准化特征
+            scaler = StandardScaler()
+            X_train = scaler.fit_transform(X_train)
+            
+            # 将训练集添加到字典
+            data_dict['train'] = (X_train, y_train)
+            
+            # 创建具有不同噪声水平的测试集
+            for i, noise in enumerate(noise_levels):
+                if task == 'regression':
+                    X_test, y_test = make_regression(
+                        n_samples=50,
+                        n_features=n_features,
+                        noise=noise,
+                        random_state=42+i
+                    )
+                else:
+                    X_test, y_test = make_classification(
+                        n_samples=50,
+                        n_features=n_features,
+                        n_classes=2,
+                        random_state=42+i
+                    )
+                
+                # 使用相同的缩放器转换测试集
+                X_test = scaler.transform(X_test)
+                
+                # 将测试集添加到字典
+                data_dict[f'test_{noise}'] = (X_test, y_test)
+            
+            return data_dict
+
+        # 创建回归数据集
+        reg_data = create_test_datasets(
+            task='regression',
+            n_features=20,
+            noise_levels=[0.1, 0.3, 0.5]
+        )
+
+        # 创建分类数据集
+        clf_data = create_test_datasets(
+            task='classification',
+            n_features=20,
+            noise_levels=[0.1, 0.3, 0.5]
+        )
+
+        # 测试回归任务
+        reg_params = {
+            "selected_outlier": ["不做异常值去除"],
+            "selected_preprocess": ["不做预处理", "mean_centering", "standardization"],
+            "selected_feat_sec": ["不做特征选择"],
+            "selected_model": ["LR", "SVR", "PLSR"]
+        }
+
+        # 运行优化
+        reg_results = run_optuna_v5(
+            data_dict=reg_data,
+            train_key='train',
+            isReg=True,
+            chose_n_trails=100,
+            selected_metric='r2',
+            save = r'./',
+            save_name='reg_results',
+            **reg_params
+        )
+
+        # 测试分类任务
+        clf_params = {
+            "selected_outlier": ["不做异常值去除"],
+            "selected_preprocess": ["不做预处理", "mean_centering", "standardization"],
+            "selected_feat_sec": ["不做特征选择"],
+            "selected_model": ["LogisticRegression", "SVM", "RandomForest"]
+        }
+
+        # 运行优化
+        clf_results = run_optuna_v5(
+            data_dict=clf_data,
+            train_key='train',
+            isReg=False,
+            chose_n_trails=100,
+            selected_metric='accuracy',
+            **clf_params
+        )
+
+        # 打印结果
+        def print_results(results, task_type):
+            print(f"\n{task_type} Task Results:")
+            print("-" * 50)
+            print("Best parameters:")
+            for param, value in results['best_params'].items():
+                print(f"{param}: {value}")
+            print("\nDataset Scores:")
+            for dataset_name, scores in results['dataset_scores'].items():
+                print(f"{dataset_name}: {scores['score']:.4f}")
+
+        print_results(reg_results, "Regression")
+        print_results(clf_results, "Classification")
+
+        # 可视化结果
+        def plot_results(results, task_type):
+            plt.figure(figsize=(12, 5))
+            
+            # 绘制每个数据集的得分
+            datasets = list(results['dataset_scores'].keys())
+            scores = [results['dataset_scores'][d]['score'] for d in datasets]
+            
+            plt.subplot(1, 2, 1)
+            plt.bar(datasets, scores)
+            plt.title(f'{task_type} Scores Across Datasets')
+            plt.xticks(rotation=45)
+            plt.ylabel('Score')
+            
+            # 绘制优化历史
+            trials_df = pd.DataFrame(results['optimization_history'])
+            plt.subplot(1, 2, 2)
+            plt.plot(trials_df['number'], trials_df['value'], 'b-')
+            plt.title('Optimization History')
+            plt.xlabel('Trial number')
+            plt.ylabel('Objective value')
+            
+            plt.tight_layout()
+            plt.show()
+
+        # 绘制结果
+        plot_results(reg_results, "Regression")
+        plot_results(clf_results, "Classification")
+        
+    -----
+    """
+    import random
+    import numpy as np
+    import optuna
+    from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+    from sklearn.model_selection import KFold
+    import traceback
+    from scipy.stats import pearsonr
+
+    def choose_random_elements(my_list, num_elements):
+        if num_elements == 0:
+            return random.choice(my_list)
+        else:
+            return random.choices(my_list, k=num_elements)
+
+    # 验证输入数据
+    if train_key not in data_dict:
+        raise KeyError(f"训练数据集键值 {train_key} 不在数据字典中")
+
+    X_train_orig, y_train_orig = data_dict[train_key]
+    
+    # 用于存储中间结果
+    temp_list_to_database = {}
+    results_by_dataset = {}
+
+    # 设置默认参数
+    selected_outlier = ["不做异常值去除", "mahalanobis"]
+    selected_preprocess = ["不做预处理", "mean_centering", "normalization", "standardization", 
+                         "poly_detrend", "snv", "savgol", "msc","d1", "d2", "rnv", "move_avg"]
+    preprocess_number_input = 3
+    selected_feat_sec = ["不做特征选择"]
+    selected_dim_red = ["不做降维"]
+
+    # 更新参数（如果在kw中提供）
+    if "selected_outlier" in kw: selected_outlier = kw["selected_outlier"]
+    if "selected_preprocess" in kw: selected_preprocess = kw["selected_preprocess"]
+    if "selected_feat_sec" in kw: selected_feat_sec = kw["selected_feat_sec"]
+    if "selected_dim_red" in kw: selected_dim_red = kw["selected_dim_red"]
+    
+    # 设置模型选项
+    if isReg:
+        model_options = ['LR', 'SVR', 'PLSR', 'Bayes(贝叶斯回归)', 'RFR(随机森林回归)', 'BayesianRidge']
+    else:
+        model_options = ['LogisticRegression', 'SVM', 'DT', 'RandomForest', 'KNN', 
+                        'Bayes(贝叶斯分类)', "GradientBoostingTree", "XGBoost"]
+
+    if "selected_model" in kw:
+        model_options = kw["selected_model"]
+
+    def objective(trial):
+        """Optuna优化目标函数"""
+        
+        # 复制一份原始训练数据
+        X_train, y_train = X_train_orig.copy(), y_train_orig.copy()
+
+        # 预处理流程
+        functions_ = {
+            'Pretreatment': {
+                '不做异常值去除': [AF.return_inputs, {}],
+                'mahalanobis':
+                    [AF.mahalanobis, {'threshold': trial.suggest_int('mahalanobis_threshold', 1, 100)}],
+            },
+            'Dataset_Splitting': {
+                'random_split': [AF.random_split, {'test_size': trial.suggest_float('random_split_test_size', 0.1, 0.9) ,
+                                                    'random_seed':  trial.suggest_int('random_split_random_seed', 0, 100)   }],
+                'custom_train_test_split':[AF.custom_train_test_split , {'test_size': trial.suggest_float('custom_train_test_split_test_size', 0.1, 0.9),
+                                                                            'method': trial.suggest_categorical('custom_train_test_split_method', ['KS', 'SPXY'])}],
+                            },
+            'Preprocess': {
+                '不做预处理': [AF.return_inputs, {}],
+                'mean_centering': [AF.mean_centering, {'axis':trial.suggest_categorical('mean_centering_axis',[None,0,1])}],
+                'normalization': [AF.normalization,
+                                    {'axis': trial.suggest_categorical('normalization_axis', [None,0,1])}],
+                'standardization': [AF.standardization,
+                                    {'axis': trial.suggest_categorical('standardization_axis', [None,0,1])}],
+                'poly_detrend': [AF.poly_detrend,   {'poly_order': trial.suggest_int('poly_detrend_poly_order', 2, 4)}],
+                'snv': [AF.snv, {}],
+                'savgol':[AF.savgol,{
+                    'window_len':trial.suggest_int('savgol_window_len',1,100),
+                    'poly':trial.suggest_int('savgol_poly',0,trial.params['savgol_window_len']-1),
+                    'deriv':trial.suggest_int('savgol_deriv',0,2),
+                }],
+                'msc': [AF.msc, {'mean_center': trial.suggest_categorical('msc_mean_center', [True, False])}],
+                'd1':[AF.d1, {}],
+                'd2':[AF.d2, {}],
+                'rnv':[AF.rnv, {'percent' : trial.suggest_int('rnv_percent', 1, 100)}],
+                'move_avg':[AF.move_avg, {'window_size': trial.suggest_int('move_avg_window_size', 3, 399, step=2)}],
+                'baseline_iarpls':[AF.baseline_iarpls, {'lam': trial.suggest_int('baseline_iarpls_lam', 1, 300, step=1)}],
+                'baseline_airpls':[AF.baseline_airpls, {'lam': trial.suggest_int('baseline_airpls_lam',1, 300, step=1)}],
+                'baseline_derpsalsa':[AF.baseline_derpsalsa, {'lam': trial.suggest_int('baseline_derpsalsa_lam', 1, 300, step=1)}],
+
+            },
+            "Feature_Selection": {
+                '不做特征选择': [AF.return_inputs, {}],
+                'cars': [AF.cars, {'n_sample_runs': trial.suggest_int('cars_n_sample_runs', 10, 1000),
+                                    'pls_components': trial.suggest_int('cars_pls_components', 1, 20),
+                                    'n_cv_folds': trial.suggest_int('cars_n_cv_folds', 1, 10)}],
+                'spa': [AF.spa, {'i_init': trial.suggest_int('spa_i_init', 0, 100),
+                                    'method': trial.suggest_categorical('spa_method', [0, 1]),
+                                    'mean_center': trial.suggest_categorical('spa_mean_center', [True, False])}],
+                'corr_coefficient': [AF.corr_coefficient, {'threshold': trial.suggest_float('corr_coefficient_threshold', 0.0, 1.0)}],
+                'anova': [AF.anova, {
+                    'threshold': trial.suggest_float('anova_threshold', 0.0, 1.0)}],
+                'fipls': [AF.fipls, {'n_intervals': trial.suggest_int('fipls_n_intervals', 1, 5),
+                                    'interval_width': trial.suggest_float('fipls_interval_width', 10, 500),
+                                    'n_comp': trial.suggest_int('fipls_n_comp', 2, 20)}]
+            },
+
+            'Dimensionality_reduction': {
+                '不做降维': [AF.return_inputs, {}],
+                'pca': [AF.pca, {'n_components': trial.suggest_int('pca_n_components', 1, 50)}],
+                'remove_high_variance_and_normalize':[AF.remove_high_variance_and_normalize, {'remove_feat_ratio': trial.suggest_float('remove_high_variance_and_normalize_remove_feat_ratio', 0.01, 0.5)}]
+            },
+
+
+            'Model_Selection': {
+                'LR': [AF.LR, {}],
+                'SVR': [AF.SVR,
+                            {'kernel': trial.suggest_categorical('SVR_kernel', ['linear', 'poly', 'rbf', 'sigmoid']),
+                                'C': trial.suggest_float("SVR_c", 1e-5, 1000, log=True),
+                                'epsilon': trial.suggest_float('SVR_epsilon', 0.01, 1, log=True),
+                                'degree': trial.suggest_int('SVR_degree', 1, 5),
+                                'gamma': trial.suggest_float("SVR_gamma", 1e-5, 1000, log=True)}],
+                'PLSR': [AF.PLSR, {
+                                    'scale': trial.suggest_categorical('PLSR_scale', [True, False])}],
+                'Bayes(贝叶斯回归)': [AF.bayes, {
+                                                    'tol': trial.suggest_float('Bayes(贝叶斯回归)_tol', 0.0001, 0.1),
+                                                    'alpha_1': trial.suggest_float('Bayes(贝叶斯回归)_alpha_1', 0.0001, 0.1),
+                                                    'alpha_2': trial.suggest_float('Bayes(贝叶斯回归)_alpha_2', 0.0001, 0.1),
+                                                    'lambda_1': trial.suggest_float('Bayes(贝叶斯回归)_lambda_1', 0.0001, 0.1),
+                                                    'lambda_2': trial.suggest_float('Bayes(贝叶斯回归)_lambda_2', 0.0001, 0.1),
+                                                    'compute_score': trial.suggest_categorical('Bayes(贝叶斯回归)_compute_score', [True, False]),
+                                                    'fit_intercept': trial.suggest_categorical('Bayes(贝叶斯回归)_fit_intercept', [True, False])}],
+                'RFR(随机森林回归)': [AF.RFR, {'n_estimators': trial.suggest_int('RFR(随机森林回归)_n_estimators', 1, 100),
+                                                'criterion': trial.suggest_categorical('RFR(随机森林回归)_criterion', ["squared_error", "absolute_error", "friedman_mse", "poisson"]),
+                                                # 'max_depth': trial.suggest_int('RFR(随机森林回归)_max_depth', 1, 100),
+                                                'min_samples_split': trial.suggest_float('RFR(随机森林回归)_min_samples_split', 0.0, 1.0),
+                                                'min_samples_leaf': trial.suggest_int('RFR(随机森林回归)_min_samples_leaf', 1, 100),
+                                                'min_weight_fraction_leaf': trial.suggest_float('RFR(随机森林回归)_min_weight_fraction_leaf', 0.0001, 0.1),
+                                                'max_features': trial.suggest_float('RFR(随机森林回归)_max_features', 0.1,1.0),
+                                                'random_state': trial.suggest_int('RFR(随机森林回归)_random_state', 1, 100),
+                                                }],
+                'BayesianRidge': [AF.BayesianRidge, {
+                                                'alpha_1': trial.suggest_float("BR_alpha_1", 1e-10, 10.0, log=True),
+                                                'alpha_2': trial.suggest_float("BR_alpha_2", 1e-10, 10.0, log=True),
+                                                'lambda_1': trial.suggest_float("BR_lambda_1", 1e-10, 10.0, log=True),
+                                                'lambda_2': trial.suggest_float("BR_lambda_2", 1e-10, 10.0, log=True),
+                                                'tol': trial.suggest_float("BR_tol", 1e-6, 1e-1, log=True),
+                                                'fit_intercept': trial.suggest_categorical("BR_fit_intercept", [True, False]),
+                                            }],
+
+
+                'LogisticRegression':[AF.logr,{}],
+                'SVM': [AF.SVM, {
+                        'kernel': trial.suggest_categorical('SVM_kernel', ['linear', 'poly', 'rbf', 'sigmoid']),
+                        'C': trial.suggest_float("SVM_C", 1e-5, 1000, log=True),
+                        'degree': trial.suggest_int('SVM_degree', 1, 5),
+                        'gamma': trial.suggest_float("SVM_gamma", 1e-5, 1000, log=True),
+                        'random_state': trial.suggest_int('SVM_random_state', 1, 100),
+                    }],
+                'DT': [AF.DT, {
+                    'criterion': trial.suggest_categorical('DT_criterion', ["gini", "entropy", "log_loss"]),
+                    'splitter': trial.suggest_categorical('DT_splitter', ["best", "random"]),
+                    'min_samples_split': trial.suggest_int('DT_min_samples_split', 2, 100),
+                    'min_samples_leaf': trial.suggest_int('DT_min_samples_leaf', 1, 100),
+                    'random_state': trial.suggest_int('DT_random_state', 1, 100),
+                }],
+                'RandomForest': [AF.RandomForest, {
+                    'n_estimators': trial.suggest_int('RandomForest_n_estimators', 1, 100),
+                    'criterion': trial.suggest_categorical('RandomForest_criterion',
+                                                            ["entropy", "gini", "log_loss"]),
+                    'min_samples_split': trial.suggest_float('RandomForest_min_samples_split', 0.0, 1.0),
+                    'min_samples_leaf': trial.suggest_int('RandomForest_min_samples_leaf', 1, 100),
+                    'random_state': trial.suggest_int('RandomForest_random_state', 1, 100),
+                    }],
+                'KNN': [AF.KNN, {
+                    'n_neighbors': trial.suggest_int('KNN_n_neighbors', 1, 100),
+                    'weights': trial.suggest_categorical('KNN_weights', ['uniform', 'distance']),
+                    'algorithm': trial.suggest_categorical('KNN_algorithm',
+                                                            ['auto', 'ball_tree', 'kd_tree', 'brute']),
+                    'leaf_size': trial.suggest_int('KNN_leaf_size', 1, 100),
+                    'p': trial.suggest_int('KNN_p', 1, 100),
+                    'metric': trial.suggest_categorical('KNN_metric',
+                                                        ['minkowski', 'euclidean', 'manhattan', 'chebyshev']),
+                }],
+                'Bayes(贝叶斯分类)': [
+                    AF.CustomNaiveBayes, {
+                        'classifier_type': trial.suggest_categorical('Bayes(贝叶斯分类)_classifier_type',
+                                                                        ['gaussian', 'multinomial', 'bernoulli']),
+                        'alpha': trial.suggest_float('Bayes(贝叶斯分类)_alpha', 0.0001, 0.1),
+                    }],
+                'GradientBoostingTree': [AF.GradientBoostingTree, {
+                    'n_estimators': trial.suggest_int('GradientBoostingTree_n_estimators', 1, 100),
+                    'learning_rate': trial.suggest_float('GradientBoostingTree_learning_rate', 0.01, 1.0),
+                    'max_depth': trial.suggest_int('GradientBoostingTree_max_depth', 1, 100),
+                    'random_state': trial.suggest_int('GradientBoostingTree_random_state', 1, 100),
+                }],
+                'XGBoost': [AF.XGBoost, {
+                    'n_estimators': trial.suggest_int('XGBoost_n_estimators', 1, 100),
+                    'learning_rate': trial.suggest_float('XGBoost_learning_rate', 0.01, 1.0),
+                    'max_depth': trial.suggest_int('XGBoost_max_depth', 1, 100),
+                    'subsample': trial.suggest_float('XGBoost_subsample', 0.1, 1.0),
+                    'colsample_bytree': trial.suggest_float('XGBoost_colsample_bytree', 0.1, 1.0),
+                    'random_state': trial.suggest_int('XGBoost_random_state', 1, 100),
+                }],
+            },
+        }
+
+        # 随机选择处理方法
+        selection_steps = [0] * 8
+        selection_steps[0] = choose_random_elements(selected_outlier, 0)
+        selection_steps[3] = choose_random_elements(selected_preprocess, preprocess_number_input)
+        selection_steps[4] = choose_random_elements(selected_feat_sec, 0)
+        selection_steps[7] = choose_random_elements(selected_dim_red, 0)
+        selection_steps[5] = choose_random_elements(model_options, 0)
+        # 存储当前trial的选择步骤
+        trial.set_user_attr('selection_steps', {
+            'outlier': selection_steps[0],
+            'preprocess': selection_steps[3],
+            'feature_selection': selection_steps[4],
+            'dimensionality_reduction': selection_steps[7],
+            'model': selection_steps[5]
+        })
+
+        # 存储当前trial的处理流程
+        temp_list_to_database[trial.number] = []
+        
+        # # 应用预处理步骤到训练数据
+        # X_processed, y_processed = functions_["Pretreatment"][selection_steps[0]][0](
+        #     X_train, y_train, **functions_["Pretreatment"][selection_steps[0]][1]
+        # )
+
+        # # 应用其他预处理步骤
+        # for preprocess_step in selection_steps[3]:
+        #     X_processed, _, y_processed, _ = functions_["Preprocess"][preprocess_step][0](
+        #         X_processed, X_processed, y_processed, y_processed,
+        #         **functions_["Preprocess"][preprocess_step][1]
+        #     )
+
+        # # 特征选择和降维
+        # X_processed, _, y_processed, _ = functions_["Feature_Selection"][selection_steps[4]][0](
+        #     X_processed, X_processed, y_processed, y_processed,
+        #     **functions_["Feature_Selection"][selection_steps[4]][1]
+        # )
+
+        # X_processed, _, y_processed, _ = functions_["Dimensionality_reduction"][selection_steps[7]][0](
+        #     X_processed, X_processed, y_processed, y_processed,
+        #     **functions_["Dimensionality_reduction"][selection_steps[7]][1]
+        # )
+
+        # 在所有数据集上进行预测和评估
+        dataset_scores = {}
+        try:
+            for dataset_key, (X_test, y_test) in data_dict.items():
+                # 对测试数据应用相同的预处理步骤
+                X_test_processed = X_test.copy()
+                X_train_processed = X_train.copy()
+                
+                
+                
+                for preprocess_step in selection_steps[3]:
+                    X_train_processed, X_test_processed, y_train, y_test = functions_["Preprocess"][preprocess_step][0](
+                        X_train_processed, X_test_processed, y_train, y_test,
+                        **functions_["Preprocess"][preprocess_step][1]
+                    )
+                # 特征选择和降维
+                X_train_processed, X_test_processed, y_train, y_test = functions_["Feature_Selection"][selection_steps[4]][0](
+                    X_train_processed, X_test_processed, y_train, y_test,
+                    **functions_["Feature_Selection"][selection_steps[4]][1]
+                )
+                X_train_processed, X_test_processed, y_train, y_test = functions_["Dimensionality_reduction"][selection_steps[7]][0](
+                    X_train_processed, X_test_processed, y_train, y_test,
+                    **functions_["Dimensionality_reduction"][selection_steps[7]][1]
+                )
+                
+
+                # 应用模型并预测
+                _, _, _, y_pred = functions_["Model_Selection"][selection_steps[5]][0](
+                    X_train_processed, X_test_processed, y_train, y_test,
+                    **functions_["Model_Selection"][selection_steps[5]][1]
+                )
+
+                # 计算评估指标
+                if selected_metric == 'mae':
+                    score = mean_absolute_error(y_test, y_pred)
+                elif selected_metric == 'mse':
+                    score = mean_squared_error(y_test, y_pred)
+                elif selected_metric == 'r2':
+                    score = r2_score(y_test, y_pred)
+                elif selected_metric == 'r':
+                    score = pearsonr(y_test, y_pred)[0]
+                else:
+                    from sklearn.metrics import accuracy_score, precision_score, recall_score
+                    if selected_metric == 'accuracy':
+                        score = accuracy_score(y_test, y_pred)
+                    elif selected_metric == 'precision':
+                        score = precision_score(y_test, y_pred, average="weighted")
+                    elif selected_metric == "recall":
+                        score = recall_score(y_test, y_pred, average="weighted")
+
+                dataset_scores[dataset_key] = {
+                    'score': score,
+                    # 'y_test': y_test,
+                    'y_pred': y_pred.tolist(),
+                }
+
+            # 存储结果
+            trial.set_user_attr('dataset_scores', dataset_scores)
+            
+            # 返回所有数据集评分的平均值作为优化目标
+            return np.mean([ds['score'] for ds in dataset_scores.values()])
+        except Exception as e:
+            print(f"Error in trial {trial.number}: {str(e)}")
+            return None
+
+    # 创建和运行Optuna研究
+    study = optuna.create_study(
+        direction='maximize' if selected_metric in ['r2', 'r', 'accuracy', 'precision', 'recall'] else 'minimize'
+    )
+    study.optimize(objective, n_trials=chose_n_trails)
+
+    # 获取最佳trial的结果
+    best_trial = study.best_trial
+    best_params = best_trial.params
+    best_dataset_scores = best_trial.user_attrs['dataset_scores']
+    best_selection_steps = best_trial.user_attrs['selection_steps']  # 获取最佳selection_steps
+
+        # 修改后的结果处理部分
+    def process_results(study, best_params, best_dataset_scores, best_selection_steps, save=None, save_name=None):
+        """
+        处理和保存优化结果
+        
+        Parameters
+        ----------
+        study : optuna.Study
+            优化研究对象
+        best_params : dict
+            最佳参数
+        best_dataset_scores : dict
+            各数据集的得分
+        best_selection_steps : dict
+            最佳选择步骤
+        save : str, optional
+            保存路径
+        save_name : str, optional
+            保存文件名
+        
+        Returns
+        -------
+        dict
+            处理后的结果字典
+        """
+        import pandas as pd
+        
+        # 获取trials数据框
+        trials_df = study.trials_dataframe()
+        
+        # 处理datetime列
+        for col in trials_df.columns:
+            if pd.api.types.is_datetime64_any_dtype(trials_df[col]):
+                trials_df[col] = trials_df[col].apply(lambda x: x.strftime('%Y-%m-%d %H:%M:%S') if pd.notnull(x) else None)
+        
+        # 整理结果
+        results = {
+            'best_params': best_params,
+            'best_selection_steps': best_selection_steps,
+            'dataset_scores': best_dataset_scores,
+            'optimization_history': trials_df.to_dict('records')
+        }
+        
+        # 如果需要保存结果
+        if save and save_name:
+            import os
+            import json
+            os.makedirs(save, exist_ok=True)
+            save_path = os.path.join(save, f"{save_name}_results.json")
+            
+            try:
+                with open(save_path, 'w', encoding='utf-8') as f:
+                    json.dump(results, f, ensure_ascii=False, indent=4, default=str)
+                print(f"Results successfully saved to {save_path}")
+            except Exception as e:
+                print(f"Error saving results: {str(e)}")
+        
+        return results
+
+    return process_results(
+        study=study,
+        best_params=best_params,
+        best_dataset_scores=best_dataset_scores,
+        best_selection_steps=best_selection_steps,
+        save=save,
+        save_name=save_name
+    )
 
 def rebuild_model(X, y, splited_data=None, stored_str=None):
 
@@ -2297,11 +2489,11 @@ def rebuild_model(X, y, splited_data=None, stored_str=None):
     dim_reduction = param_list[4]
     model_selection = param_list[5]
 
-    # Apply the outlier removal function
-    X_new, y_new = functions_["Pretreatment"][outlier_removal[0][0]][0](X, y, **outlier_removal[1][0])
 
     # Apply the dataset splitting
     if splited_data is None:
+        X_new, y_new = functions_["Pretreatment"][outlier_removal[0][0]][0](X, y, **outlier_removal[1][0])
+
         X_train, X_test, y_train, y_test = functions_["Dataset_Splitting"][data_splitting[0][0]][0](
             X_new, y_new, **data_splitting[1][0]
         )
@@ -2854,7 +3046,7 @@ def run_regression_optuna_v3(data_name,X = None,y=None ,data_splited = None, mod
 
         try:
             if model == 'PLS':
-                n_components = trial.suggest_int('n_components', 1, 600)
+                n_components = trial.suggest_int('n_components', 1, 30)
                 regressor = PLSRegression(n_components=n_components)
             elif model == 'SVR':
                 C = trial.suggest_float('C', 1e-3, 1e3,log=True)
@@ -3766,7 +3958,7 @@ def reconForMZI_CVX(PD_list,s21_data_path = 'S21.mat'):
     parameters:
     ------
         s21_data: 输入的S21数据，格式为mat文件的地址
-        PD_list: 输入的PD值列表，格式为csv文件  PD_mW_band1, PD_mW_band2, PD_mW_band3, PD_mW_band4, PD_source_mW_band1, PD_source_mW_band2, PD_source_mW_band3, PD_source_mW_band4 = PD_list
+        PD_list: 输入的PD值列表 PD_mW_band1, PD_mW_band2, PD_mW_band3, PD_mW_band4, PD_source_mW_band1, PD_source_mW_band2, PD_source_mW_band3, PD_source_mW_band4 = PD_list
     ------
     return: [样品重建光谱、光源重建光谱]
     ------

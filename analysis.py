@@ -86,4 +86,3 @@ def plot_correlation_graph(X, Y,save_dir=None):
     if save_dir is not None:
         fig.write_image(save_dir+'correlation_coefficients.png')
     fig.show()
-

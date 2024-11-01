@@ -436,7 +436,7 @@ import plotly.graph_objs as go
 from scipy.stats import pearsonr, spearmanr
 
 
-def plot_mean( data_X, data_y,data_name = '',X_name = '',y_name='',scale=True,draw_y=True, save_dir=None,width_and_height=None,X_ticks=None):
+def plot_mean( data_X, data_y = None,data_name = '',X_name = '',y_name='',scale=True,draw_y=True, save_dir=None,width_and_height=None,X_ticks=None):
 # 2024-10-10
     '''
     example:
@@ -471,11 +471,17 @@ def plot_mean( data_X, data_y,data_name = '',X_name = '',y_name='',scale=True,dr
     ---------
         - 绘制均值变化图
     '''
+    
     data_X_mean = np.mean(data_X, axis=1)
+
+
+    if data_y is None:
+        draw_y = False
     if scale:
         data_X_mean = (data_X_mean-np.min(data_X_mean))/(np.max(data_X_mean)-np.min(data_X_mean))
-        data_y = (data_y-np.min(data_y))/(np.max(data_y)-np.min(data_y))
-
+        if data_y is not None:
+            data_y = (data_y-np.min(data_y))/(np.max(data_y)-np.min(data_y))
+    
 
     if X_ticks is None:
         X_ticks = np.arange(len(data_X_mean))
@@ -613,10 +619,12 @@ def Sample_spectral_ranking(X,y,category="all_samples" ,wave = None):
     fig = go.Figure()
     for i in range(ranked.shape[0]):
         fig.add_trace(go.Scatter(x=None, y=ranked[i,:], name=str(y[i])))
-    
+        
+    # 设置标题
+    # fig.update_layout(title=str(ca+" Spectra Absorbance Ranking Curve")
     fig.update_xaxes(title_text="Wavelength")
     fig.update_yaxes(title_text="Rank")
-    fig.update_layout(title=str(category)+" Spectra Absorbance Ranking Curve")
+    fig.update_layout(title=str(category)+" Spectra Absorbance Ranking Curve" )
     fig.show()
 
 def Numerical_distribution(ndarr,category:Union[str,list]="all_samples",feat_ = None):

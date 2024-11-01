@@ -479,6 +479,39 @@ def baseline_derpsalsa(X_train, X_test, y_train, y_test, lam=1000):
 
 # 特征选择  要求输入为 X_train, X_test, y_train, y_test, **params  输出为 X_train, X_test, y_train, y_test
 
+
+
+
+# 去除方差较大的特征并进行最大最小归一化
+def remove_high_variance_and_normalize(X_train, X_test, y_train, y_test, remove_feat_ratio):
+    # 计算X_train各特征的方差
+    variances = np.var(X_train, axis=0)
+
+    # 根据方差对特征索引进行排序（从小到大）
+    sorted_indices = np.argsort(variances)
+
+    # 计算要移除的特征数量
+    num_features_to_remove = int(X_train.shape[1] * remove_feat_ratio)
+
+    # 确定要移除的特征索引（取方差较大的那部分）
+    features_to_remove = sorted_indices[-num_features_to_remove:]
+
+    # 去除X_train和X_test中的指定特征
+    X_train = np.delete(X_train, features_to_remove, axis=1)
+    X_test = np.delete(X_test, features_to_remove, axis=1)
+
+    # 对剩余特征进行最大最小归一化
+    for i in range(X_train.shape[1]):
+        min_val = np.min(X_train[:, i])
+        max_val = np.max(X_train[:, i])
+        X_train[:, i] = (X_train[:, i] - min_val) / (max_val - min_val)
+        X_test[:, i] = (X_test[:, i] - min_val) / (max_val - min_val)
+
+    return X_train, X_test, y_train, y_test
+
+
+
+
 #随机选择
 def random_select(X_train, X_test, y_train, y_test,min_features=1, max_features=20, random_seed=42,mylog = None):
     """
@@ -847,6 +880,20 @@ def RFR(x_train, x_test, y_train, y_test, n_estimators=100, criterion='squared_e
     return y_train, y_test, y_train_pred, y_test_pred
 
 
+def BayesianRidge(x_train, x_test, y_train, y_test, alpha_1=1.0, alpha_2=1.0, lambda_1=1.0,
+                  lambda_2=1.0, tol=0.001, fit_intercept=True,
+                  copy_X=True, verbose=False, **kwargs):
+    from sklearn.linear_model import BayesianRidge
+    br = BayesianRidge(alpha_1=alpha_1, alpha_2=alpha_2, lambda_1=lambda_1,
+                       lambda_2=lambda_2, tol=tol, fit_intercept=fit_intercept,
+                      copy_X=copy_X, verbose=verbose, **kwargs)
+    br.fit(x_train, y_train)
+    y_train_pred = br.predict(x_train)
+    y_test_pred = br.predict(x_test)
+    return y_train, y_test, y_train_pred, y_test_pred
+
+
+
 
 
 #######################################################################################################################################
@@ -1022,6 +1069,37 @@ def XGBoost(X_train, X_test, y_train, y_test, n_estimators=100, learning_rate=0.
     y_test_pred = classifier.predict(X_test)
 
     return y_train, y_test, y_train_pred, y_test_pred
+
+
+
+
+
+
+########################################################################################################################################################################
+##### 把上面的所有函数都构建成管道#####
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 if __name__ == '__main__':

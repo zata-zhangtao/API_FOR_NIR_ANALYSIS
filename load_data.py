@@ -4,8 +4,10 @@ loading data
 Functions:
 ---------
     - create_connection_for_Guangyin_database( database:str,host:str='192.168.3.41', port:int=53306, user:str='root', password:str='Guangyin88888888@',charset:str='utf8mb4'): 创建与Guangyin数据库的连接
+    - insert_prototype_data_to_mysql(connection:object,   table_name:str,  PD样品:list, PD光源:Union[list,None], PD背景:Union[list,None], 重建样品:Union[list,None], 重建光源:Union[list,None], 重建样品扣背景:Union[list,None], 项目名称:str, 项目类型:str, 采集部位:Union[str,None], 采集日期:str, 志愿者:Union[str,None], 理化值:dict, 创建时间:Union[str,datetime.datetime],备注信息:Union[str,None]=None, 是否删除:Union[int,None]=None, 删除时间:Union[datetime.datetime,None]=None): 没有返回值
     - insert_spectrum_data_to_mysql(table_name:str,   光谱:list,  项目名称:str, 项目类型:str,  采集日期:str,理化值:dict,创建时间:str,光谱类型:str=None,采集部位:str=None, 志愿者:str=None,是否删除:int=None, 删除时间:str=None):没有返回值
     - get_data_from_mysql(sql): return data
+    - get_dataset_from_mysql(sql): return dataset
     - add_alcoholXlsxData_to_GuangyinDatabase(file_path): 没有返回值
     - sort_by_date(data_time) :  return(sorted_datetime, *sorted_data_arrays)
     - datetime_to_timestamp(data_time) :  将日期时间字符串的NumPy数组转换为时间戳（以秒为单位）的NumPy数组
@@ -17,10 +19,6 @@ Functions:
     - Filter_from_prototype_data_by_volunteer(file_path =r"C:\BaiduSyncdisk\code&note\0-data_analysis\0923酒精数据分析\data\MZI酒精数据_ALL.xlsx" , volunteer_name= None)
     - load_prototype_data(file_path):  加载样机的数据
     - get_data : X,y  加载光谱数据,输入X,y所在的列,如果有名字可以输入名字返回特定名字自愿者的数据
-    - alcohol_1111 : X,y  默认加载11月11日的酒精数据，也可以通过设置参数加载其他数据
-    - get_volunteer_name : list(str) 默认加载11月11日的酒精数据的志愿者的名字
-    - get_volunteer_data : dict  默认加载11月11日的酒精数据的志愿者的数据,返回字典
-    - get_waterContent_11_07 : X,y 默认加载11月07日的皮肤水分数据
     - get_feat_index_accroding_wave : list(int) 根据波长范围，返回对应的索引
     - get_wave_accroding_feat_index : list(int) 根据索引，返回对应的波长
     - get_file_list_include_name : list(str) 根据文件名所包含的字符串，返回文件列表
@@ -34,6 +32,7 @@ Examples:
     - 创建与Guangyin数据库的连接 create_connection_for_Guangyin_database( database:str,host:str='192.168.3.41', port:int=53306, user:str='root', password:str='Guangyin88888888@',charset:str='utf8mb4')
     - 向mysql数据库中插入台式光谱仪光谱数据 insert_spectrum_data_to_mysql(table_name:str,   光谱:list,  项目名称:str, 项目类型:str,  采集日期:str,理化值:dict,创建时间:str,光谱类型:str=None,采集部位:str=None, 志愿者:str=None,是否删除:int=None, 删除时间:str=None)
     - 从mysql数据库中获取字典数据 get_data_from_mysql(sql)
+    - 从光引mysql数据库中获取数据集 get_dataset_from_mysql(sql)
     - 把样机采集得到的xlsx数据插入到数据库里 add_alcoholXlsxData_to_GuangyinDatabase(file_path)
     - 根据 datetime_array 排序其他数据数组，并返回排序后的结果 sort_by_date(data_time)
     - 将日期时间字符串的NumPy数组转换为时间戳（以秒为单位）的NumPy数组 datetime_to_timestamp(data_time)
@@ -44,11 +43,6 @@ Examples:
     - 根据志愿者的名字过滤样机的数据
     - 加载样机的数据 load_prototype_data("data.xlsx")
     - 加载光谱数据  get_data()  不过提前要对数据做一下处理
-    - 根据志愿者名字加载数据 get_volunteer_data()
-    - 加载11月11日酒精数据  alcohol_1111()
-    - 加载11月11日酒精数据志愿者名字 get_volunteer_name()
-    - 加载11月7日皮肤水分数据 get_waterContent_11_07()
-    - 加载11月7日皮肤水分每个志愿者的数据 data = get_volunteer_data(file_path=r"D:\\Desktop\\NIR spectroscopy\\dataset\\skin_moisture_11_07.csv",col_y=1899,col_name=1900)
     - 根据波长区间，返回对应的索引 get_feat_index_accroding_wave( wave_range:list,wavelengths = None)
     - 根据索引list——返回对应的波长 get_wave_accroding_feat_index(index:list,wavelengths = None)
     - 把字典数据保存为csv文件
@@ -67,7 +61,6 @@ from tqdm import tqdm
 import time
 import pymysql
 import json
-import tqdm
 
 #############################################################################################################################################################################################
 ######################################################   数据库的相关操作
@@ -104,10 +97,7 @@ def load_alcohol_data_for_volunteer(volunteer, condition):
     return data_list[0], data_list[1], data_list[2]
 
 
-
-
-
-def create_connection_for_Guangyin_database( database:str,host:str='192.168.3.41', port:int=53306, user:str='select_user1', password:str='select_user1',charset:str='utf8mb4',dict = False):
+def create_connection_for_Guangyin_database(database:str,host:str='192.168.3.41', port:int=53306, user:str='select_user1', password:str='select_user1',charset:str='utf8mb4',dict = False):
     """
     创建与Guangyin数据库的连接。
     -----
@@ -155,7 +145,6 @@ def create_connection_for_Guangyin_database( database:str,host:str='192.168.3.41
     except pymysql.MySQLError as e:
         print(f"数据库连接失败: {e}")
         return None
-
 
 def update_spectrum_column(connection:object,  machine_name:str, spectrum:list):
     """
@@ -328,71 +317,433 @@ def insert_prototype_data_to_mysql(connection:pymysql.Connection,   table_name:s
         connection.close()
         print("数据库连接已关闭")
 
+def insert_spectrum_data_to_mysql(table_name:str,光谱:list,项目名称:str,项目类型:str,采集日期:str,理化值:dict,创建时间:str,光谱类型:str=None,采集部位:str=None, 志愿者:str=None,是否删除:int=None, 删除时间:str=None):
+    '''
+    把台式光谱仪光谱数据插入到 MySQL 数据库中，传入的数据必须为对应的类型，不然会报错。
+
+    example:
+        file_path = r'C:\BaiduSyncdisk\0A-ZATA\data\光谱数据\血酒精\酒精-计算式-刘波1111-1122.xlsx'
+        spectrum_data = pd.read_excel(file_path,header=0,sheet_name='光谱')
+        biomarks = pd.read_excel(file_path,header=0,sheet_name='理化值').to_dict('index')
+        biomarks = list(biomarks.values())
 
 
-def insert_spectrum_data_to_mysql(table_name:str,   光谱:list,  项目名称:str, 项目类型:str,  采集日期:str,理化值:dict,创建时间:str,光谱类型:str=None,采集部位:str=None, 志愿者:str=None,是否删除:int=None, 删除时间:str=None):
-    '''把台式光谱仪光谱数据插入到 MySQL 数据库中，传入的数据必须为对应的类型，不然会报错。
+
+        for i in tqdm(range(len(spectrum_data))):
+            now_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            insert_spectrum_data_to_mysql(table_name='复享光谱仪',光谱=spectrum_data.iloc[i].tolist(),项目名称='多发单收探头血糖数据',项目类型='人体',采集日期=file_path.split('\\')[-1].split('_')[0],理化值=biomarks[i],创建时间=now_time,光谱类型='',采集部位='',志愿者=file_path.split('\\')[-1].split('_')[1],是否删除=0, 删除时间=None)
+
 
     '''
+
+    
     if 项目类型 == '人体':
         if 采集部位 is None:
             raise ValueError("项目类型为人体时，采集部位不能为空")
-    try:
-        # 建立数据库连接
-        connection = pymysql.connect(host='192.168.3.41',port=53306, user='root', password='Guangyin88888888@', database='光谱数据库', charset='utf8mb4')
+    # try:
+    # 建立数据库连接
+    connection = pymysql.connect(host='192.168.3.41',port=53306, user='root', password='Guangyin88888888@', database='光谱数据库', charset='utf8mb4')
 
-        
-        
-        with connection.cursor() as cursor:
-            if isinstance(光谱,  list):
-                光谱 = json.dumps(光谱, ensure_ascii=False)
-            else:
-                raise ValueError("光谱数据类型错误，必须为列表")
-            if isinstance(理化值,  dict):
-                理化值 = json.dumps(理化值, ensure_ascii=False)
-            else:
-                raise ValueError("理化值数据类型错误，必须为字典")
-                
-            
-            
-            # 插入数据的SQL语句
-            insert_query = f"""
-            INSERT INTO {table_name} (光谱, 光谱类型, 项目名称, 项目类型, 采集部位, 采集日期, 志愿者, 理化值, 创建时间, 是否删除, 删除时间)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """
-            
-            # 执行插入操作
-            cursor.execute(insert_query, (光谱, 光谱类型, 项目名称, 项目类型, 采集部位, 采集日期, 志愿者, 理化值, 创建时间, 是否删除, 删除时间))
-            
-            # 提交事务
-            connection.commit()
-            print("数据插入成功")
-
-    except pymysql.MySQLError as e:
-        print(f"数据库错误: {e}")
-        return False
     
-    finally:
-        # 确保连接关闭
-        connection.close()
-        print("数据库连接已关闭")
-        return True
+    
+    with connection.cursor() as cursor:
+        if isinstance(光谱,  list):
+            光谱 = json.dumps(光谱, ensure_ascii=False)
+        else:
+            raise ValueError("光谱数据类型错误，必须为列表")
+        if isinstance(理化值,  dict):
+            理化值 = json.dumps(理化值, ensure_ascii=False)
+        else:
+            raise ValueError("理化值数据类型错误，必须为字典")
+            
+        # # 检查是否存在重复数据
+        # check_query = f"""
+        # SELECT COUNT(*) FROM {table_name} 
+        # WHERE 志愿者 = %s
+        # AND 采集日期 = %s
+        # AND 理化值 = %s
+        # AND 光谱 = %s 
+        # """
+        # cursor.execute(check_query, (志愿者, 采集日期, 理化值, 光谱))
+        # count = cursor.fetchone()[0]
+        
+        # if count > 0:
+        #     raise ValueError("数据已存在:发现相同志愿者、采集日期、理化值和光谱的记录")
+        
+        
+        # 插入数据的SQL语句
+        insert_query = f"""
+        INSERT INTO {table_name} (光谱, 光谱类型, 项目名称, 项目类型, 采集部位, 采集日期, 志愿者, 理化值, 创建时间, 是否删除, 删除时间)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        
+        # 执行插入操作
+        cursor.execute(insert_query, (光谱, 光谱类型, 项目名称, 项目类型, 采集部位, 采集日期, 志愿者, 理化值, 创建时间, 是否删除, 删除时间))
+        
+        # 提交事务
+        connection.commit()
 
+    # except pymysql.MySQLError as e:
+    #     print(f"数据库错误: {e}")
+    #     return False
+    
+    # finally:
+    #     # 确保连接关闭
+    #     connection.close()
+    #     return True
 
-
-def get_data_from_mysql(sql):
+def get_dataset_from_mysql(table_name:str, project_name:str, X_type:list, y_type:list=None,  start_time:str="1970-01-01 00:00:00", end_time:str="2100-01-01 00:00:00",volunteer:str=None,database='样机数据库'):
     '''
     example:
-    data = get_data_from_mysql("SELECT * FROM 样机_计算式_MZI_v2 WHERE 项目名称 = '2024人体酒精数据_样机芯片2' AND  `创建时间` BETWEEN '2024-10-12 00:00:01' AND '2024-10-12 23:59:59'")
+        dataset_X,dataset_y = get_dataset_from_mysql(database='光谱数据库',table_name="复享光谱仪", project_name="多发光单收光探头血糖数据", X_type=['光谱',"采集日期","志愿者"], )
+
     '''
-    conn = pymysql.connect(host='192.168.3.41',port=53306, user='root', password='Guangyin88888888@', database='样机数据库', charset='utf8mb4')
+    if volunteer is None:
+        sql = f"SELECT {','.join(X_type)},理化值 FROM {table_name} WHERE 项目名称 = '{project_name}' AND  `创建时间` BETWEEN '{start_time}' AND '{end_time} 23:59:59'"
+    else:
+        sql = f"SELECT {','.join(X_type)},理化值 FROM {table_name} WHERE 项目名称 = '{project_name}' AND  `创建时间` BETWEEN '{start_time}' AND '{end_time} 23:59:59' AND 志愿者 = '{volunteer}'"
+    data = get_data_from_mysql(sql,database)
+    dataset = {}
+    label = {}
+
+    def get_json_or_str(data):
+        if isinstance(data, str):
+            try:
+                return json.loads(data)
+            except:
+                return data
+        else:
+            return data
+    for i in X_type:
+        dataset[i] = np.array([ get_json_or_str(j) for j in data[i].values])
+    if y_type is not None:
+        for i in y_type:
+            temp = []
+            for j in data['理化值'].values:
+                temp.append(json.loads(j)[i])
+            dataset[i] = np.array(temp)
+
+    elif y_type is None:
+        for i in json.loads(data['理化值'][0]).keys():
+            temp = []
+            for j in data['理化值'].values:
+                temp.append(json.loads(j)[i])
+            dataset[i] = np.array(temp)
+    
+
+
+    
+
+    return dataset
+
+def get_data_from_mysql(sql,database='样机数据库'):
+    '''
+    example:
+        sql = "SELECT id,志愿者,采集日期,理化值 FROM `光谱数据库`.`FT光谱仪` WHERE `项目名称`='血糖数据'"
+    data = get_data_from_mysql(sql)
+    print(data)
+    data.to_csv("血糖数据.csv",index=False)
+    '''
+    conn = pymysql.connect(host='192.168.3.41',port=53306, user='select_user1', password='select_user1', database=database, charset='utf8mb4')
     data = pd.read_sql(sql, conn)
     conn.close()
     return data
-    
 
+# 使用csv文件更新数据库
+def update_data_to_mysql(file_path,database='样机数据库',table_name='样机_计算式_MZI_v2'):
+    '''
+    example:
+        update_data_to_mysql(f"{volunteer}FT.csv",database='光谱数据库',table_name='FT光谱仪')
+    '''
+    data = pd.read_csv(file_path)
+
+    conn = pymysql.connect(host='192.168.3.41',port=53306, user='root', password='Guangyin88888888@', database=database, charset='utf8mb4')
+    cursor = conn.cursor()
+    for i in tqdm(range(len(data))):
+        # 获取data中除id外的所有列名
+        columns = [col for col in data.columns if col != 'id']
+        
+        # 为每个列构建更新语句
+        for col in columns:
+            # 如果值不是None才更新
+            if pd.notna(data.iloc[i][col]):
+                sql = f"UPDATE {table_name} SET {col} = %s WHERE id = %s"
+                cursor.execute(sql, (data.iloc[i][col], data.iloc[i]['id']))
+    conn.commit()
+    conn.close()
+
+
+# V4版本 2024-12-18 修改了数据插入的逻辑，可以使用selected_data_datetime来选择插入的数据，可以插入多条数据
+def add_XlsxData_to_GuangyinDatabase_v4(file_path:str,table:str,database:str='样机数据库',project:str= '2024人体酒精数据_样机芯片2', y_type:list=['实测值','序号','是否饮酒','皮肤水分'],selected_data_datetime:str=None):
+    # V4版本 2024-12-18 修改了数据插入的逻辑，可以使用selected_data_datetime来选择插入的数据，可以插入多条数据
+    # V3版本，2024-12-13 修改为add_XlsxData_to_GuangyinDatabase
+    # V2版本 2024-10-31 修改了v1版本存理化值的方式，不兼容，因此V1版本被删除，该版本重命名为add_alcoholXlsxData_to_GuangyinDatabase
+    '''
+    -----
+    example:
+    -----
+        add_XlsxData_to_GuangyinDatabase(file_path=r'data\光谱数据\20241030_170359alcohol_data.xlsx',table ='样机_计算式_MZI_v2' ,database='样机数据库',project= '2024人体酒精数据_样机芯片2', y_type=['实测值','序号','是否饮酒','表皮水分'])
+    
+    '''
+    data = load_prototype_data_v2(file_path)
+    
+    def numpy_to_json(arr):
+        if arr is None:
+            return None
+        if isinstance(arr, str):
+            return arr
+        if isinstance(arr, datetime.datetime):
+            return arr.strftime('%Y-%m-%d %H:%M:%S')
+        return json.dumps(arr.tolist())
+    
+    """
+    将生成的数据插入到 prototype_data 表中，同时使用当前时间填充 datetime 字段。
+    
+    参数:
+    data (list of tuples): 每个元组代表一行数据
+    y_type (list): 需要从Measured_Value中提取的列名列表
+    """
+    
+    # 建立数据库连接
+    connection = pymysql.connect(
+        host='192.168.3.41',
+        port=53306,
+        user='root',
+        password='Guangyin88888888@',
+        database=database,
+        charset='utf8mb4',
+        cursorclass=pymysql.cursors.DictCursor
+    )
+    
+    PD_Sample, PD_Source, PD_BG, Recon_Sample, Recon_Source, Corrected_spectrum, Biomark, Measured_Value, y, date_time, volunteer = data
+    print("数据维度：",   PD_Sample.shape,PD_Source.shape,PD_BG.shape,Recon_Sample.shape,Recon_Source.shape,Corrected_spectrum.shape,Biomark.shape,Measured_Value.shape,y.shape,date_time.shape,volunteer.shape)
+    
+    if selected_data_datetime is not None:
+        selected_data_datetime = datetime.datetime.strptime(selected_data_datetime, '%Y-%m-%d')
+        selected_indes = np.where([datetime.datetime.strptime(str(d if d is not np.nan else '1970-01-01 00:00:00').split()[0], '%Y-%m-%d') == selected_data_datetime for d in date_time])[0]
+        print(selected_indes)
+        PD_Sample = PD_Sample[selected_indes]
+        PD_Source = PD_Source[selected_indes]
+        PD_BG = PD_BG[selected_indes]
+        Recon_Sample = Recon_Sample[selected_indes]
+        Recon_Source = Recon_Source[selected_indes]
+        Corrected_spectrum = Corrected_spectrum[selected_indes]
+        Biomark = Biomark[selected_indes]
+        Measured_Value = Measured_Value.iloc[selected_indes,:]
+        y = y[selected_indes]
+        date_time = date_time[selected_indes]
+        volunteer = volunteer[selected_indes]
+        print(PD_Sample.shape,PD_Source.shape,PD_BG.shape,Recon_Sample.shape,Recon_Source.shape,Corrected_spectrum.shape,Biomark.shape,Measured_Value.shape,y.shape,date_time.shape,volunteer.shape)
+    # 从Measured_Value中提取指定列的数据
+    selected_values = {}
+    for col in y_type:
+        if col in Measured_Value.columns:
+            selected_values[col] = Measured_Value[col].tolist()
+        else:
+            print(f"警告: 列 '{col}' 在Measured_Value中未找到")
+    
+    try:
+
+        sql  = f"""select 理化值列表 from 项目信息 where 项目名称 = '{project}' """
+        with connection.cursor() as cursor:
+            cursor.execute(sql)
+            result = cursor.fetchone()
+            if result is None:
+                print(f"项目 '{project}' 不存在，请先添加项目信息")
+                return
+            else:
+                print(f"理化值列表: {result['理化值列表']}")
+                if not all(item in json.loads(result['理化值列表']) for item in y_type):
+                    print(f"警告: {y_type}  中有不在理化值列表中, 请先检查")
+                    return
+
+        
+
+        for i in tqdm(range(len(PD_Sample))):
+            # 建立游标
+            with connection.cursor() as cursor:
+                # # 先检查记录是否存在
+                # check_sql = f"""
+                # SELECT COUNT(*) AS count FROM {table}
+                # WHERE 采集日期 = %s
+                # """
+                
+                # cursor.execute(check_sql, (numpy_to_json(date_time[i])))
+                # result = cursor.fetchone()
+                
+                # 如果记录不存在，插入新数据
+                if 1:
+                    # 创建 SQL 插入语句
+                    sql = f"""
+                    INSERT INTO {table}(
+                        项目类型, 项目名称, 采集日期, 采集部位, 志愿者, 
+                        PD背景, PD样品, PD光源, 重建样品扣背景, 重建样品, 
+                        重建光源, 理化值, 备注信息, 创建时间, 是否删除, 删除时间
+                    )
+                    VALUES (
+                        '人体', '{project}', %s, '手臂外侧', %s, 
+                        %s, %s, %s, %s, %s, %s, %s, NULL, %s, 0, NULL
+                    )
+                    """
+                    
+                    # 构建理化值数据
+                    measured_data = {k: selected_values[k][i] for k in y_type if k in selected_values}
+                    
+                    insert_data = [
+                        (
+                            datetime.datetime.strptime(str(date_time[i]).replace('T', ' ').split('.')[0], '%Y-%m-%d %H:%M:%S'),
+                            numpy_to_json(volunteer[i]),
+                            numpy_to_json(PD_BG[i]),
+                            numpy_to_json(PD_Sample[i]),
+                            numpy_to_json(PD_Source[i]),
+                            numpy_to_json(Corrected_spectrum[i]),
+                            numpy_to_json(Recon_Sample[i]),
+                            numpy_to_json(Recon_Source[i]),
+                            json.dumps(measured_data,ensure_ascii=False),  # 使用提取的多个列值
+                            datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        )
+                    ]
+                    
+                    # 执行 SQL 插入操作
+                    cursor.executemany(sql, insert_data)
+                    
+                    # 提交事务
+                    connection.commit()
+                else:
+                    print(f"Record for date {date_time[i]} and volunteer {volunteer[i]} already exists. Skipping insertion.")
+    
+    finally:
+        # 关闭连接
+        connection.close()
+
+def add_XlsxData_to_GuangyinDatabase(file_path,table,database='样机数据库',project= '2024人体酒精数据_样机芯片2', y_type=['实测值','序号','是否饮酒','皮肤水分']):
+    # V3版本，2024-12-13 修改为add_XlsxData_to_GuangyinDatabase
+    # V2版本 2024-10-31 修改了v1版本存理化值的方式，不兼容，因此V1版本被删除，该版本重命名为add_alcoholXlsxData_to_GuangyinDatabase
+    '''
+    -----
+    example:
+    -----
+        add_XlsxData_to_GuangyinDatabase(file_path=r'data\光谱数据\20241030_170359alcohol_data.xlsx',table ='样机_计算式_MZI_v2' ,database='样机数据库',project= '2024人体酒精数据_样机芯片2', y_type=['实测值','序号','是否饮酒','表皮水分'])
+    
+    '''
+    data = load_prototype_data_v2(file_path)
+    
+    def numpy_to_json(arr):
+        if arr is None:
+            return None
+        if isinstance(arr, str):
+            return arr
+        if isinstance(arr, datetime.datetime):
+            return arr.strftime('%Y-%m-%d %H:%M:%S')
+        return json.dumps(arr.tolist())
+    
+    """
+    将生成的数据插入到 prototype_data 表中，同时使用当前时间填充 datetime 字段。
+    
+    参数:
+    data (list of tuples): 每个元组代表一行数据
+    y_type (list): 需要从Measured_Value中提取的列名列表
+    """
+    
+    # 建立数据库连接
+    connection = pymysql.connect(
+        host='192.168.3.41',
+        port=53306,
+        user='root',
+        password='Guangyin88888888@',
+        database=database,
+        charset='utf8mb4',
+        cursorclass=pymysql.cursors.DictCursor
+    )
+    
+    PD_Sample, PD_Source, PD_BG, Recon_Sample, Recon_Source, Corrected_spectrum, Biomark, Measured_Value, y, date_time, volunteer = data
+    print("数据维度：",   PD_Sample.shape,PD_Source.shape,PD_BG.shape,Recon_Sample.shape,Recon_Source.shape,Corrected_spectrum.shape,Biomark.shape,Measured_Value.shape,y.shape,date_time.shape,volunteer.shape)
+
+    # 从Measured_Value中提取指定列的数据
+    selected_values = {}
+    for col in y_type:
+        if col in Measured_Value.columns:
+            selected_values[col] = Measured_Value[col].tolist()
+        else:
+            print(f"警告: 列 '{col}' 在Measured_Value中未找到")
+    
+    try:
+
+        sql  = f"""select 理化值列表 from 项目信息 where 项目名称 = '{project}' """
+        with connection.cursor() as cursor:
+            cursor.execute(sql)
+            result = cursor.fetchone()
+            if result is None:
+                print(f"项目 '{project}' 不存在，请先添加项目信息")
+                return
+            else:
+                print(f"理化值列表: {result['理化值列表']}")
+                if not all(item in json.loads(result['理化值列表']) for item in y_type):
+                    print(f"警告: {y_type}  中有不在理化值列表中, 请先检查")
+                    return
+
+        
+
+        for i in tqdm(range(len(PD_Sample))):
+            # 建立游标
+            with connection.cursor() as cursor:
+                # # 先检查记录是否存在
+                # check_sql = f"""
+                # SELECT COUNT(*) AS count FROM {table}
+                # WHERE 采集日期 = %s
+                # """
+                
+                # cursor.execute(check_sql, (numpy_to_json(date_time[i])))
+                # result = cursor.fetchone()
+                
+                # 如果记录不存在，插入新数据
+                if 1:
+                    # 创建 SQL 插入语句
+                    sql = f"""
+                    INSERT INTO {table}(
+                        项目类型, 项目名称, 采集日期, 采集部位, 志愿者, 
+                        PD背景, PD样品, PD光源, 重建样品扣背景, 重建样品, 
+                        重建光源, 理化值, 备注信息, 创建时间, 是否删除, 删除时间
+                    )
+                    VALUES (
+                        '人体', '{project}', %s, '手臂外侧', %s, 
+                        %s, %s, %s, %s, %s, %s, %s, NULL, %s, 0, NULL
+                    )
+                    """
+                    
+                    # 构建理化值数据
+                    measured_data = {k: selected_values[k][i] for k in y_type if k in selected_values}
+                    
+                    insert_data = [
+                        (
+                            datetime.datetime.strptime(str(date_time[i]).replace('T', ' ').split('.')[0], '%Y-%m-%d %H:%M:%S'),
+                            numpy_to_json(volunteer[i]),
+                            numpy_to_json(PD_BG[i]),
+                            numpy_to_json(PD_Sample[i]),
+                            numpy_to_json(PD_Source[i]),
+                            numpy_to_json(Corrected_spectrum[i]),
+                            numpy_to_json(Recon_Sample[i]),
+                            numpy_to_json(Recon_Source[i]),
+                            json.dumps(measured_data,ensure_ascii=False),  # 使用提取的多个列值
+                            numpy_to_json(date_time[i])
+                        )
+                    ]
+                    
+                    # 执行 SQL 插入操作
+                    cursor.executemany(sql, insert_data)
+                    
+                    # 提交事务
+                    connection.commit()
+                else:
+                    print(f"Record for date {date_time[i]} and volunteer {volunteer[i]} already exists. Skipping insertion.")
+    
+    finally:
+        # 关闭连接
+        connection.close()
 
 def add_alcoholXlsxData_to_GuangyinDatabase(file_path,table,database='样机数据库',project= '2024人体酒精数据_样机芯片2', y_type=['实测值','序号','是否饮酒','皮肤水分']):
+    # V3版本，2024-12-13 修改为Xls
     # V2版本 2024-10-31 修改了v1版本存理化值的方式，不兼容，因此V1版本被删除，该版本重命名为add_alcoholXlsxData_to_GuangyinDatabase
     '''
     -----
@@ -458,7 +809,7 @@ def add_alcoholXlsxData_to_GuangyinDatabase(file_path,table,database='样机数�
 
         
 
-        for i in tqdm.tqdm(range(len(PD_Sample))):
+        for i in tqdm(range(len(PD_Sample))):
             # 建立游标
             with connection.cursor() as cursor:
                 # 先检查记录是否存在
@@ -514,8 +865,6 @@ def add_alcoholXlsxData_to_GuangyinDatabase(file_path,table,database='样机数�
         # 关闭连接
         connection.close()
 
-
-
 def sort_by_datetime(datetime_array, *data_arrays):
     """
     根据 datetime_array 排序其他数据数组，并返回排序后的结果
@@ -538,10 +887,6 @@ def sort_by_datetime(datetime_array, *data_arrays):
     # 对其他传入的数据数组进行排序
     sorted_data_arrays = [data_array[sorted_indices] for data_array in data_arrays]
     return(sorted_datetime, *sorted_data_arrays)
-
-    
-
-
 
 def datetime_to_timestamp(data_time):
     """
@@ -567,9 +912,6 @@ def datetime_to_timestamp(data_time):
     # 转换回NumPy数组并返回
     return timestamps.to_numpy()
 
-
-
-
 def get_date_time_array_for_train_val_test(date_time, X_train, X_val):
     """
     分割日期时间数组为训练、验证和测试集合的索引。
@@ -592,8 +934,6 @@ def get_date_time_array_for_train_val_test(date_time, X_train, X_val):
     
     return date_time_train, date_time_val, date_time_test
 
-
-
 def save_model(model, file_name=None):
     """
     保存模型到指定文件。
@@ -613,7 +953,6 @@ def save_model(model, file_name=None):
     full_path = os.path.abspath(file_name)
     
     print(f"Model saved to {full_path}")
-
 
 def load_model(file_name):
     """
@@ -635,8 +974,6 @@ def load_model(file_name):
     print(f"Model loaded from {file_name}")
     
     return model
-
-
 
 def split_data_by_date_v2(X , y , date_time,timestamp_split_point,split_by_date=True):
     ''' 相较于v1版本增加了返回时间戳的功能,增加了随机划分功能， 但是随机划分需要在这里手动改test和val比例
@@ -683,7 +1020,6 @@ def split_data_by_date_v2(X , y , date_time,timestamp_split_point,split_by_date=
     
     return X_train, X_val, X_test, y_train, y_val, y_test,date_time_train,date_time_val,date_time_test
 
-
 def split_data_by_date(X, y, date_time, timestamp_split_point, 
                        start_timestamp='1970-09-21 00:00:00', 
                        end_timestamp='2099-12-11 23:59:59'):
@@ -716,9 +1052,6 @@ def split_data_by_date(X, y, date_time, timestamp_split_point,
     
     return X_train, X_val, X_test, y_train, y_val, y_test
 
-
-
-
 def split_date_time(date_time, start_timestamp = '2024-09-21',    end_timestamp = '2024-09-27 23:59:59'):
     ''' 注意，时间是精确到秒的，所以需要注意时间的格式
     date_time = ["2024-09-21 09:31:25", "2024-09-21 09:31:45", "2024-09-27 09:32:05"], start_timestamp = '2024-09-21',    end_timestamp = '2024-09-27 23:59:59'
@@ -729,7 +1062,6 @@ def split_date_time(date_time, start_timestamp = '2024-09-21',    end_timestamp 
     filtered_df = df[(df['timestamp'] >= start_timestamp) & (df['timestamp'] <= end_timestamp)]
     # 索引
     return  filtered_df.index.to_numpy()
-
 
 def Filter_from_prototype_data_by_volunteer(data_list = None, file_path =r"C:\BaiduSyncdisk\code&note\0-data_analysis\0923酒精数据分析\data\MZI酒精数据_ALL.xlsx" , volunteer_name= None):
     '''
@@ -762,8 +1094,7 @@ def Filter_from_prototype_data_by_volunteer(data_list = None, file_path =r"C:\Ba
     elif volunteer_name is None:
         return Corrected_spectrum, label, date_time
 
-
-def  load_prototype_data(file_path,pos=None):
+def load_prototype_data(file_path,pos=None):
     import time
     print('该函数将于2024年11月30日后停止使用！！！')
     time.sleep(10)
@@ -865,9 +1196,8 @@ def  load_prototype_data(file_path,pos=None):
     else:
         print('pos参数输入错误')
         return None
-    
 
-def  load_prototype_data_v2(file_path,pos=None):
+def load_prototype_data_v2(file_path,pos=None):
     # 2024-10-31 V2版本
     # 相比于V1版本，实测值Measured_Value的sheet的返回值修改为df格式，方便后续处理
 
@@ -970,152 +1300,6 @@ def  load_prototype_data_v2(file_path,pos=None):
         print('pos参数输入错误')
         return None
     
-
-
-def get_data(file_path:str,
-                 name=None,
-                 name_col=1902,
-                 X_col = [0,1899],
-                 y_col=1899,
-
-                 ):
-    '''加载光谱数据
-    -------
-    Parameters:
-    ---------
-        - file_path : str 
-        - name : str  volunteer name
-        - name_col : int  volunteer name column
-        - y_col : y值所在的列数
-    ---------
-    Returns:
-    ---------
-        - X : ndarray
-            NIR spectral data
-        - y : ndarray
-            alcohol content
-    
-    '''
-    import numpy as np
-    import pandas as pd
-    data = pd.read_csv(file_path)
-    if name is None:
-        X = data.iloc[:,X_col[0]:X_col[1]].to_numpy()
-        y = data.iloc[:,y_col].to_numpy()
-    else:
-        index_row = data[:,name_col] == name
-        X = data.iloc[index_row,X_col[0]:X_col[1]].to_numpy()
-        y = data.iloc[index_row,y_col].to_numpy()
-    return X,y
-
-def alcohol_1111(file_path = r"D:\Desktop\NIR spectroscopy\main\Features_Selection_Analysis\Alcohol.csv",
-                 name=None,
-                 name_col=1902,
-                 y_col=1899,
-                 ):
-    '''加载11月11日的酒精数据 Loading Alcohol data for Nov. 11 
-    -------
-    Parameters:
-    ---------
-        - file_path : str 
-        - name : str  volunteer name
-        - name_col : int  volunteer name column
-        - y_col : int  alcohol content column
-    ---------
-    Returns:
-    ---------
-        - X : ndarray
-            NIR spectral data
-        - y : ndarray
-            alcohol content
-    
-    '''
-    import numpy as np
-    import pandas as pd
-    data = pd.read_csv(file_path).values
-    if name is None:
-        X = data[:,:1899]
-        y = data[:,y_col].reshape(-1,1)
-    else:
-        index_row = data[:,name_col] == name
-        X = data[index_row,:1899]
-        y = data[index_row,y_col].reshape(-1,1)
-    return X,y
-
-def get_volunteer_name(file_path = r"D:\Desktop\NIR spectroscopy\main\Features_Selection_Analysis\Alcohol.csv",
-                       col = 1902):
-    '''获取志愿者的名字
-    -------
-    Parameters:
-    ---------
-        - file_path : str 文件路径, default
-        - col : int 列数 ,default 1902
-    ---------
-    Returns:
-    ---------
-        - name : list
-            volunteer name
-    '''
-    import pandas as pd
-    import numpy as np
-    data = pd.read_csv(file_path).values
-    name = data[:,col]
-    name = np.unique(name)
-    return name
-
-def get_volunteer_data(file_path = r"D:\Desktop\NIR spectroscopy\main\Features_Selection_Analysis\Alcohol.csv",col_y:Union[int,list] = 1899,
-col_name = 1902):
-    '''获取志愿者的数据
-    -------
-    Parameters:
-    ---------
-        - file_path : str 文件路径, default
-        - col_y : int or list(int) 列数 ,default 1899  酒精含量所在的列数,如果是list,则是列数范围，如[1899,1900],Y值的列数范围必须是连续的
-        - col_name : int 列数 ,default 1902  志愿者名字所在的列数
-    ---------
-    Returns:
-    ---------
-        - dict : {volunteer_name:(X: ndarray
-                            NIR spectral data,
-                        y : ndarray
-                            alcohol content
-            )}
-    '''
-    import pandas as pd
-    import numpy as np
-    data = pd.read_csv(file_path).values
-    name = data[:,col_name]
-    name = np.unique(name)
-    eacn_volunteer_data = {}
-    for i in range(len(name)):
-        index_row = data[:,col_name] == name[i]
-        X = data[index_row,:1899]
-        if isinstance(col_y,list):
-            y = data[index_row,col_y[0]:col_y[1]+1]
-        else:
-            y = data[index_row,col_y].reshape(-1,1)
-        eacn_volunteer_data[name[i]] = (X,y)
-    return eacn_volunteer_data
-
-def get_waterContent_11_07(file_path = r"D:\Desktop\NIR spectroscopy\api\load_data"):
-    '''加载11月07日的皮肤水分数据
-    -------
-    Parameters:
-    ---------
-        - file_path : str 文件路径, default
-    ---------
-    Returns:
-    ---------
-        - X : ndarray
-            NIR spectral data
-        - y : ndarray
-            water content
-    '''
-    import pandas as pd
-    X = pd.read_csv(file_path+"\\Hydration_11_7_all_X.csv",index_col=0).values.astype(float)
-    Y = pd.read_csv(file_path+"\\Hydration_11_7_all_Y.csv",index_col=0).values.astype(float)
-    return X[:,:-1],Y
-
 def get_feat_index_accroding_wave(wave_range:list,wavelengths = None):
     '''根据波长范围，返回对应的索引
     -------
@@ -1441,7 +1625,10 @@ class FileSync:
         self.SERVER_URL2 = server_url2
         self.server_url = None
 
-    def check_server(self, url):
+    def check_server(self, url=None):
+        if url is None:
+            url = self.SERVER_URL1
+        print(url)
         try:
             response = requests.get(url, timeout=5)
             return response.status_code == 200
@@ -1461,6 +1648,7 @@ class FileSync:
     def upload_file(self, filename):
         self.get_server_url()
         file_size = os.path.getsize(filename)
+
         with open(filename, 'rb') as f:
             with tqdm(total=file_size, unit='B', unit_scale=True, desc=f"正在上传 {filename}") as pbar:
                 response = requests.post(

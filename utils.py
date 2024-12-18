@@ -39,13 +39,13 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error,r2_score
 import random
 import warnings
 import time
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+from mpl_toolkits.mplot3d import Axes3D
 
 
-# matplotlib.use('TkAgg') 
 
-
-
-
+# 获取MZI样机的band
 def get_MZI_bands():
     # [0,281,482,683,884]
     '''返回MZI样机的波段
@@ -67,11 +67,7 @@ def get_MZI_bands():
     
     # return np.concatenate((band1_nm,band2_nm,band3_nm,band4_nm))
     return [band1_nm,band2_nm,band3_nm,band4_nm]    
-
-    
-
-
-
+# 
 def PCA_LR_SVR_trian_and_eval(X,y,category = "all_samples",processed_X = None,feat_ratio = 0.33,samples_test_size = 0.33):
     """
     PCA+LR+SVR训练和评估
@@ -822,7 +818,6 @@ def Random_FS_RFR_train_and_eval(X,
             rfr_min_MAE_feats.append(feats)
         return rfr_min_MAE,rfr_min_MAE_R2,rfr_min_MAE_feats
         
-
 def Auto_tuning_with_svr(X=None,y=None,name="auto_tuning",epoch=100,n_trial=200,n_jobs=2,test_set = False,**kw):
     """
     输入数据和名字，输出一个以名字命名的文件
@@ -923,8 +918,6 @@ def Auto_tuning_with_svr(X=None,y=None,name="auto_tuning",epoch=100,n_trial=200,
         except Exception as e:
             pass
 
-
-
 class save_data_to_csv:
     
     '''import filename with path and colums , if path is not exist ,create it
@@ -941,8 +934,6 @@ class save_data_to_csv:
         df = pd.DataFrame(data,columns = self.columns)
         updated_df = pd.concat([self.existing_df,df],ignore_index=True)
         updated_df.to_csv(self.file_name,index=False)
-
-
 
 # TODO remove this function
 def run_optuna_v3(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=None,save=None,save_name= "",
@@ -1379,7 +1370,6 @@ def run_optuna_v3(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=N
     print(str(temp_list_to_database[study.best_trial.number]))
     return str(temp_list_to_database[study.best_trial.number]),study.best_value
 
-
 def run_optuna_v4(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=None,save=None,save_name= "",**kw):
     # 2024-10-23
     # 光谱数据的自动调参函数，可以自动调整选用建模过程中的哪些方法，参数。
@@ -1808,7 +1798,6 @@ def run_optuna_v4(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=N
         
         # 返回交叉验证的平均分数
         return np.mean(cv_scores)
-
 
 def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='r', save=None, save_name="", **kw):
     # 2024-10-31 V5版本
@@ -2254,6 +2243,9 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
         # 在所有数据集上进行预测和评估
         dataset_scores = {}
         try:
+        # if True:
+
+
             for dataset_key, (X_test, y_test) in data_dict.items():
                 # 对测试数据应用相同的预处理步骤
                 X_test_processed = X_test.copy()
@@ -2545,9 +2537,6 @@ def get_pythonFile_functions(AF):
             models[name] = (member, default_params)
     return models
 
-
-
-
 def run_regression_optuna(data_name,X,y,model='PLS',split = 'SPXY',test_size = 0.3, n_trials=200,object = None,cv = None,save_dir = None):
     
     
@@ -2731,8 +2720,6 @@ def run_regression_optuna(data_name,X,y,model='PLS',split = 'SPXY',test_size = 0
     pd.DataFrame(best_params,index=[0]).to_csv(f"{save_dir}/{model}_{data_name}_best_params.csv",index=False)
     
     return regressor_final,[X_train_scaled,X_test_scaled,y_train,y_test,y_pred_train,y_pred_test]
-
-
 
 def run_regression_optuna_v2(data_name,X = None,y=None ,data_splited = None,  model='PLS',split = 'SPXY',test_size = 0.3, n_trials=200,object = None,cv = None,save_dir = None):
     # 增加功能，支持自定义输入训练测试集  data_splited
@@ -2924,57 +2911,8 @@ def run_regression_optuna_v2(data_name,X = None,y=None ,data_splited = None,  mo
     
     return regressor_final,[X_train_scaled,X_test_scaled,y_train,y_test,y_pred_train,y_pred_test]
 
+def run_regression_optuna_v3(data_name,X = None,y=None ,data_splited = None, model='PLS',split = 'SPXY',test_size = 0.3, n_trials=200,object = "R2",cv = None,save_dir = None,each_class_mae=False,only_train_and_val_set=False):
 
-
-# from tpot import TPOTRegressor
-# from sklearn.model_selection import train_test_split
-
-# def tpot_auto_tune(X, y, generations=5, population_size=20, cv=5):
-#     # 划分训练集和测试集
-#     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    
-#     # 初始化TPOTRegressor
-#     tpot = TPOTRegressor(generations=generations, population_size=population_size, cv=cv, random_state=42, verbosity=2)
-    
-#     # 拟合模型
-#     tpot.fit(X_train, y_train)
-    
-#     # 评估模型
-#     score = tpot.score(X_test, y_test)
-    
-#     # 输出最优模型和分数
-#     print("最优模型：", tpot.fitted_pipeline_)
-#     print("最优分数：", score)
-    
-#     # 返回最优模型
-#     return tpot.fitted_pipeline_
-
-
-
-def run_regression_optuna_v3(data_name,X = None,y=None ,data_splited = None, model='PLS',split = 'SPXY',test_size = 0.3, n_trials=200,object = None,cv = None,save_dir = None,each_class_mae=False,only_train_and_val_set=False):
-
-    # 新增功能 data_splited 输入训练集验证集和测试集
-
-    '''
-    -----
-    params:
-    -----
-        data_name: 数据集名称
-        X: 特征数据
-        y: 标签数据
-        data_splited: 划分好训练验证测试数据的字典，{'X_train':X_train,'X_val':X_val,'X_test':X_test,'y_train':y_train,'y_val':y_val,'y_test':y_test}
-        model: 选择模型，{"PLS","SVR","RFreg","LR"}
-        split: 选择数据集划分方式，{"SPXY","Random","Sequential"}
-        n_trials: 选择优化次数
-        object: 选择优化目标，{"R2","MAE","RMSE","Pearsonr"}
-        cv: 交叉验证方式,填整数就是k折交叉验证，填None不做交叉验证
-        save_dir: 保存结果的名称
-        each_class_mae: 是否计算每个类别的mae,画再散点图上
-        
-    -----
-    return:
-
-    '''
 
     from sklearn.cross_decomposition import PLSRegression
     from sklearn.model_selection import train_test_split
@@ -3105,7 +3043,7 @@ def run_regression_optuna_v3(data_name,X = None,y=None ,data_splited = None, mod
                 elif object == 'RMSE':
                     score = - np.sqrt(mean_squared_error(y_val, y_val_pred))
                 else:
-                    assert False, "object_name error"
+                    assert False, "metric_name error"
                 
                 # 当前模型的评估指标
                 # mae = mean_absolute_error(y_test, y_val_pred)
@@ -3223,18 +3161,6 @@ def run_regression_optuna_v3(data_name,X = None,y=None ,data_splited = None, mod
     
     # return regressor_final,[X_train_scaled,X_test_scaled,y_train,y_test,y_pred_train,y_pred_test]
 
-
-
-
-
-
-
-
-
-
-# from tpot import TPOTRegressor
-from sklearn.model_selection import train_test_split
-
 def tpot_auto_tune(X, y, generations=5, population_size=20, cv=5):
     # 划分训练集和测试集
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -3255,11 +3181,6 @@ def tpot_auto_tune(X, y, generations=5, population_size=20, cv=5):
     # 返回最优模型
     return tpot.fitted_pipeline_
 
-
-
-
-
-
 # 把所有PD减取连续噪声
 def PD_reduce_noise(PD_samples, PD_noise, ratio=9,base_noise= None):
 
@@ -3271,10 +3192,6 @@ def PD_reduce_noise(PD_samples, PD_noise, ratio=9,base_noise= None):
     for i in range(0,len(PD_samples)):
         PD_samples_new[i,:] = PD_samples[i,:] - (PD_noise_X_mean[i]-base_noise)*ratio
     return PD_samples_new
-
-
-
-
 
 def spectral_reconstruction_train(PD_values, Spectra_values, epochs=50, lr=1e-3,save_dir = None):
     
@@ -3376,7 +3293,6 @@ def spectral_reconstruction_train(PD_values, Spectra_values, epochs=50, lr=1e-3,
         time_str = time.strftime("%Y-%m-%d_%H_%M_%S", time.localtime())
         plt.savefig(save_dir+time_str+'_model.png')
         torch.save(model, save_dir+time_str+'.pth')
-
 
 def convex_optimization_recon_for_MZI(PD_list,s21_data_path = 'S21.mat'):
     '''MZI样机的重建算法，采用凸优化方法，输入为S21数据和PD值列表，输出为重建的S21数据
@@ -3512,8 +3428,6 @@ def convex_optimization_recon_for_MZI(PD_list,s21_data_path = 'S21.mat'):
     return np.concatenate([Recon_band1, Recon_band2, Recon_band3, Recon_band4]), np.concatenate(
         [rec_source_band1, rec_source_band2, rec_source_band3, rec_source_band4])
 
-
-
 def create_dataset_by_file_path_v1(file_path):
     from nirapi.load_data import load_prototype_data
     """Load the datasets from a given file path.
@@ -3532,8 +3446,6 @@ def create_dataset_by_file_path_v1(file_path):
     data["label"] = labels
     return data
 
-
-
 def load_training_data_v1(file_path=r"../data/MZI酒精数据20240921 - 校正-旧数据.xlsx",type = "Corrected spectrum"):
     '''
     -------
@@ -3550,9 +3462,6 @@ def load_training_data_v1(file_path=r"../data/MZI酒精数据20240921 - 校正-�
     elif type == "PD Sample":
         return None
     return  NotImplementedError("暂不支持该数据类型")
-
-
-#### 划分数据集
 
 def load_and_split_data_v1(file_path=r"../data/MZI酒精数据20240921 - 校正-旧数据.xlsx", type="Corrected spectrum", split_index=670, train_ratio=0.6, val_ratio=0.2):
     '''
@@ -3658,8 +3567,6 @@ def load_and_split_data_v2(file_path=r"../data/MZI酒精数据20240921 - 校正-
     
     return train_data, val_data, test_data
 
-
-
 def load_and_split_data_v3(file_path=r"../data/MZI酒精数据20240921 - 校正-旧数据.xlsx", 
                            type="Corrected spectrum", 
                            split_index=670, 
@@ -3724,11 +3631,6 @@ def load_and_split_data_v3(file_path=r"../data/MZI酒精数据20240921 - 校正-
     
     return train_data, val_data, test_data
 
-
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-
 def plot_distribution(train_data, val_data, test_data, label_column = 'label'):
     """
     Plots the distribution of labels in training, validation, and test sets.
@@ -3739,7 +3641,10 @@ def plot_distribution(train_data, val_data, test_data, label_column = 'label'):
     test_data (pd.DataFrame): Test dataset
     label_column (str): Name of the column containing labels
     """
+    # Example usage:
+    #  plot_distribution(train_data, val_data, test_data, 'label')
     plt.figure(figsize=(12, 6))
+
 
     # Plotting Training set
     plt.subplot(1, 3, 1)
@@ -3765,8 +3670,6 @@ def plot_distribution(train_data, val_data, test_data, label_column = 'label'):
     # Displaying the plots
     plt.tight_layout()
     plt.show()
-
-
 
 def plot_3d_pca_scatter(data, label_col='label', n_components=3):
     """
@@ -3814,13 +3717,6 @@ def plot_3d_pca_scatter(data, label_col='label', n_components=3):
 
     # 显示图形
     plt.show()
-# Example usage:
-# plot_distribution(train_data, val_data, test_data, 'label')
-
-import pandas as pd
-from sklearn.decomposition import PCA
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 
 def plot_3d_pca_combined(train_data, val_data, test_data, label_col='label', n_components=3):
     """
@@ -3885,10 +3781,6 @@ def plot_3d_pca_combined(train_data, val_data, test_data, label_col='label', n_c
     # Show the plot
     plt.show()
 
-import pandas as pd
-from sklearn.decomposition import PCA
-import matplotlib.pyplot as plt
-
 def plot_2d_pca_combined(train_data, val_data, test_data, label_col='label', n_components=2):
     """
     Perform PCA on the combined train, validation, and test datasets, and plot them in a 2D scatter plot.
@@ -3949,8 +3841,6 @@ def plot_2d_pca_combined(train_data, val_data, test_data, label_col='label', n_c
 
     # Show the plot
     plt.show()
-
-
 
 def reconForMZI_CVX(PD_list,s21_data_path = 'S21.mat'):
     '''MZI样机的重建算法，采用凸优化方法，输入为S21数据和PD值列表，输出为重建的S21数据

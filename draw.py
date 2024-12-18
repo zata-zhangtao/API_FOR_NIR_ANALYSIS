@@ -53,19 +53,143 @@ import pandas as pd
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-import matplotlib.pyplot as plt
 # 解决中文显示问题
 plt.rcParams['font.family'] = 'SimHei'  # 替换为你选择的字体
 plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
-
-
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score, roc_curve, auc,
     mean_squared_error, mean_absolute_error, r2_score
 )
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+import seaborn as sns
+# wavelengths = pd.read_csv(r"C:\Users\zata\AppData\Local\Programs\Python\Python310\Lib\site-packages\nirapi\Alcohol.csv").columns[:1899].values.astype("float")
+# wavelengths = pd.read_csv(r"C:\Users\zata\A ppData\Local\Programs\Python\Python310\Lib\site-packages\nirapi\Alcohol.csv").columns[:1899].values.astype("float")
+from scipy.stats import pearsonr, spearmanr
 
+# 血糖的克拉克图
+def clarke_error_grid(reference, prediction):
+    """
+    绘制Clarke Error Grid分析图
+    参数:
+    reference: 参考血糖值 (mmol/L)
+    prediction: 预测血糖值 (mmol/L)
+    """
+    
+    # 创建图形
+    fig, ax = plt.subplots(figsize=(10, 10))
+    
+    # 设置坐标轴范围
+    max_val = 22.2  # 400 mg/dL in mmol/L
+    ax.set_xlim(0, max_val)
+    ax.set_ylim(0, max_val)
+
+    # 绘制对角线（虚线）
+    ax.plot([0, max_val], [0, max_val], 'k--', linewidth=1)
+
+    # 关键血糖值点（mg/dL转换为mmol/L）
+    x_70 = 3.89   # 70 mg/dL
+    x_150 = 8.33  # 150 mg/dL
+    x_180 = 10    # 180 mg/dL
+    y_70 = 3.89   # 70 mg/dL
+    y_180 = 10    # 180 mg/dL
+
+    # 垂直分界线
+    ax.axvline(x=x_70, ymin=0, ymax=x_70*0.8/max_val, color='k', linewidth=1)
+    ax.axvline(x=x_70, ymin=x_70*1.2/max_val, ymax=max_val, color='k', linewidth=1)
+    ax.axvline(x=x_180, ymin=0, ymax=x_70/max_val, color='k', linewidth=1)
+    ax.axvline(x=240/18, ymin=y_70/max_val, ymax=y_180/max_val, color='k', linewidth=1)
+
+    # 水平分界线
+    ax.axhline(y=y_70, xmin=0, xmax=x_70/max_val/1.2, color='k', linewidth=1)
+    ax.axhline(y=y_70, xmin=x_180/max_val, xmax=max_val, color='k', linewidth=1)
+    ax.axhline(y=y_180, xmin=0, xmax=x_70/max_val, color='k', linewidth=1)
+    ax.axhline(y=y_180, xmin=240/18/max_val, xmax=max_val, color='k', linewidth=1)
+
+    # A区边界线（±20%）
+    ax.plot(np.array([x_70/1.2, max_val]), 1.2 * np.array([x_70/1.2, max_val]), 'k-', linewidth=1)
+    ax.plot(np.array([x_70, max_val]), 0.8 * np.array([x_70, max_val]), 'k-', linewidth=1)
+
+    # # B区边界线（±50%）
+    ax.plot([x_70, (max_val-110/18)], [y_180, max_val], 'k-', linewidth=1)
+    ax.plot([130/18,x_180], [0, y_70], 'k-', linewidth=1)
+
+    # 添加区域标签
+    ax.text(2, 3, 'A', fontsize=15)   # 左下B区
+    ax.text(6, 15, 'C', fontsize=15)  # A区中心
+    ax.text(18, 12, 'B', fontsize=15)  # 右上B区
+    ax.text(10, 15, 'B', fontsize=15)  # 右上B区
+    ax.text(9, 1, 'C', fontsize=15)  # C区
+    ax.text(2, 8, 'D', fontsize=15)  # 左上D区
+    ax.text(18, 8, 'D', fontsize=15) # 右上D区
+    ax.text(2, 15, 'E', fontsize=15)  # 左上E区
+    ax.text(18, 2, 'E', fontsize=15)  # 右下E区
+
+    # 绘制数据点
+    plt.scatter(reference, prediction, c='blue', s=30)
+
+    # 设置标题和标签
+    plt.title("Clarke Error Grid Analysis")
+    plt.xlabel("Reference Glucose (mmol/L)")
+    plt.ylabel("Predicted Glucose (mmol/L)")
+
+    def get_zone(ref, pred):
+        """
+        确定测量点所属的区域
+        ref, pred: 单位为mmol/L
+        """
+        # 转换为mg/dL
+        ref_mgdl = ref * 18
+        pred_mgdl = pred * 18
+        
+        # A区判定
+        if ref_mgdl < 70:
+            if abs(pred_mgdl - ref_mgdl) <= 20:
+                return 'A'
+        else:
+            if pred_mgdl >= ref_mgdl * 0.8 and pred_mgdl <= ref_mgdl * 1.2:
+                return 'A'
+        
+        # B区判定
+        if ref_mgdl < 70:
+            if pred_mgdl <= 180 and pred_mgdl > 70:
+                return 'B'
+        elif ref_mgdl >= 180:
+            if pred_mgdl >= 70:
+                return 'B'
+        else:
+            if ((pred_mgdl >= ref_mgdl * 0.7 and pred_mgdl <= ref_mgdl * 1.5) or
+                (pred_mgdl >= ref_mgdl - 30 and pred_mgdl <= ref_mgdl + 30)):
+                return 'B'
+        
+        # C区判定
+        if (ref_mgdl >= 70 and ref_mgdl <= 290 and
+            pred_mgdl >= ref_mgdl * 0.5 and pred_mgdl <= ref_mgdl * 0.8):
+            return 'C'
+        
+        # E区判定
+        if ((ref_mgdl <= 70 and pred_mgdl >= 180) or
+            (ref_mgdl >= 180 and pred_mgdl <= 70)):
+            return 'E'
+        
+        # D区判定（其他所有情况）
+        return 'D'
+
+    # 计算各区域的点数
+    zones = [get_zone(r, p) for r, p in zip(reference, prediction)]
+    zone_counts = {zone: zones.count(zone) for zone in 'ABCDE'}
+    total = len(zones)
+    
+    # 显示统计结果
+    # for i, zone in enumerate('ABCDE'):
+    #     percentage = zone_counts[zone] / total * 100
+    #     plt.text(0.02, 0.98 - i*0.05, 
+    #             f'Zone {zone}: {percentage:.1f}%',
+    #             transform=plt.gca().transAxes)
+
+    return zone_counts
 
 
 def plotly_simple_chart(data, x_axis=None, x_tick_interval=100, x_title="Time", y_title="Intensity", title="Data Over Time", template="plotly_white", tick_angle=90):
@@ -113,10 +237,6 @@ def plotly_simple_chart(data, x_axis=None, x_tick_interval=100, x_title="Time", 
     )
 
     fig.show()
-
-
-
-
 
 def analyze_model_performance(y_train, y_train_pred, y_val, y_val_pred, y_test, y_test_pred):
     """
@@ -235,21 +355,6 @@ def analyze_model_performance(y_train, y_train_pred, y_val, y_val_pred, y_test, 
 
         plt.tight_layout()
         plt.show()
-
-# 使用示例：调用此函数并传递训练、验证和测试集的真实值和预测值
-# analyze_model_performance(y_train, y_train_pred, y_val, y_val_pred, y_test, y_test_pred)
-
-
-
-
-
-
-
-
-import matplotlib.pyplot as plt
-import numpy as np
-
-
 
 
 def plot_actual_vs_predicted(X_axis_train, y_train, y_train_pred, X_axis_val, y_val, y_val_pred, X_axis_test, y_test, y_test_pred,title = "",X_axis_step=30,draw_type = 'line'):
@@ -420,22 +525,6 @@ def matlplotlib_chinese_display_fix():
     plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
 
-
-
-import pandas as pd
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-import matplotlib.pyplot as plt
-import seaborn as sns
-# wavelengths = pd.read_csv(r"C:\Users\zata\AppData\Local\Programs\Python\Python310\Lib\site-packages\nirapi\Alcohol.csv").columns[:1899].values.astype("float")
-# wavelengths = pd.read_csv(r"C:\Users\zata\A ppData\Local\Programs\Python\Python310\Lib\site-packages\nirapi\Alcohol.csv").columns[:1899].values.astype("float")
-
-import numpy as np
-import plotly.graph_objs as go
-from scipy.stats import pearsonr, spearmanr
-
-
 def plot_mean( data_X, data_y = None,data_name = '',X_name = '',y_name='',scale=True,draw_y=True, save_dir=None,width_and_height=None,X_ticks=None):
 # 2024-10-10
     '''
@@ -519,9 +608,101 @@ def plot_mean( data_X, data_y = None,data_name = '',X_name = '',y_name='',scale=
     else:
         fig.write_image( save_dir+ f'/{data_name}.png',width=1800, height=1200)
 
+def spectral_absorption_v2(X,y = None,category="all_samples",wave = None,plt_show = False):
+    '''画光谱吸收图
+    -------
+    Parameters:
+    ---------
+        - X : ndarray 光谱数据 shape of (n_samples,n_features)
+        - y : ndarray 物质含量
+        - class :表示数据是属于谁的，默认是所有人的，如果是某个人的，就填写志愿者的名字
+        - wave : ndarray 波长
+        - plt_show : bool 是否用matplotlib画图
+    ---------
+    Returns:
+    ---------
+    Modify:
+    -------
+        - 2023-11-28 : 增加了Wavelengths参数，可以传入波长数据，如果不传入，就默认加载1899维的波长数据
+        - 2023-12-14 : 增加了plt_show参数，可以选择是用matlibplot画图还是用plotly画图
+        - 2024-01-09 : 增加了相同y值使用相同颜色的功能
 
+    '''
+    import numpy as np
+    import pandas as pd 
+    import matplotlib.pyplot as plt
+    import plotly.graph_objects as go
+    
+    # 读取数据
+    absorbance = X
+###### 2023-11-28 增加了Wavelengths参数，可以传入波长数据，如果不传入，就默认加载1899维的波长数据 begin
+    # if wave is None: 
+    #     wavelengths = [i for i in range(X.shape[1])]
+    # else:
+    #     wavelengths = wave
+###############################3 end
+        
+    ####begin 是否用matplotlib画图 modify 2023-12-14
+    if plt_show:
+        # 解决中文显示问题
+        plt.rcParams['font.sans-serif'] = ['SimHei']
+        plt.rcParams['axes.unicode_minus'] = False
 
+        # matplotlib plotting
+        plt.figure(figsize=(15,5))
+        
+        if y is not None:
+            # 获取唯一的y值
+            unique_y = np.unique(y)
+            # 为每个唯一的y值分配一个颜色
+            colors = plt.cm.rainbow(np.linspace(0, 1, len(unique_y)))
+            color_dict = dict(zip(unique_y, colors))
+            
+            # 按y值分组画图
+            for y_val in unique_y:
+                mask = y == y_val
+                for i in range(len(absorbance[mask])):
+                    plt.plot(absorbance[mask][i,:], color=color_dict[y_val], label=f'y={y_val}')
+        else:
+            for i in range(len(absorbance)):
+                plt.plot(absorbance[i,:])
+                
+        plt.xlabel('Wavelength')
+        plt.ylabel('Absorbance')
+        plt.legend()
+        plt.title(category+' Spectra Absorbance Curve')
+        plt.show()
+        return
+    ####end 是否用matplotlib画图 modify 2023-12-14
 
+    if y is None:
+        y = np.zeros(X.shape[0])
+        print("Warning: y is None, set y to zeros")
+
+    fig = go.Figure()
+    
+    # 获取唯一的y值并为每个值分配颜色
+    unique_y = np.unique(y)
+    colors = [f'hsl({h},50%,50%)' for h in np.linspace(0, 360, len(unique_y))]
+    color_dict = dict(zip(unique_y, colors))
+    
+    # 按y值分组添加曲线
+    for y_val in unique_y:
+        mask = y == y_val
+        for i in range(len(absorbance[mask])):
+            fig.add_trace(go.Scatter(
+                x=wave if wave is not None else None, 
+                y=absorbance[mask][i,:],
+                name=f'y={y_val}',
+                line=dict(color=color_dict[y_val])
+            ))
+            
+    fig.update_layout(
+        title=category+" Spectra Absorbance Curve",
+        xaxis_title="Wavelength(nm)",
+        yaxis_title="Absorbance"
+    )
+    fig.show()
 
 def spectral_absorption(X,y = None,category="all_samples",wave = None,plt_show = False):
     '''画光谱吸收图
@@ -1014,9 +1195,6 @@ def Numerical_distribution_V2(ndarr,category:Union[str,list]="all_samples",feat_
 
     fig1.show()
 
-
-
-
 def classification_report_plot(y_test, y_pred,data_name = ""):
 
     # 画分类的图
@@ -1037,7 +1215,6 @@ def classification_report_plot(y_test, y_pred,data_name = ""):
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
     plt.show()
-
 
 def train_and_test_pred_plot(y_train,y_test,y_pred_train,y_pred_test,data_name="",save_dir=None,each_class_mae=True,content = ""):
     import plotly.graph_objects as go
@@ -1179,7 +1356,6 @@ def train_val_and_test_pred_plot(y_train,y_val,y_test,y_pred_train,y_pred_val,y_
         fig.show()
         return 0
     
-
 def pred_plot(y_test,y_pred_test, data_name="",save_dir=None,each_class_mae=True,content = ""):
     import plotly.graph_objects as go
     import numpy as np
@@ -1232,8 +1408,6 @@ def pred_plot(y_test,y_pred_test, data_name="",save_dir=None,each_class_mae=True
         fig.write_image(f'{save_dir}/{data_name}_train_test_pred.png',width=1800, height=1200)
     else:
         return 0
-
-
 
 def plot_multiclass_line(data_name,X,y,save_dir=None):
     """
@@ -1296,7 +1470,6 @@ def plot_multiclass_line(data_name,X,y,save_dir=None):
     else:
         fig.show()
 
-
 if __name__ == '__main__':
 
 
@@ -1320,7 +1493,4 @@ if __name__ == '__main__':
     analyze_model_performance(y_train, y_train_pred, y_val, y_val_pred, y_test, y_test_pred)
 
 
-
-if __name__ == '__main__':
-    pass
 

@@ -6,6 +6,7 @@ from sklearn.decomposition import PCA
 import seaborn as sns
 from matplotlib.backends.backend_pdf import PdfPages
 import io
+import datetime
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
@@ -27,19 +28,53 @@ from sklearn.linear_model import LinearRegression
 import os
 matplotlib.use('Agg')
 import scipy
+import sys
 
 # 设置matplotlib中文字体
-plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'Arial Unicode MS']
-plt.rcParams['axes.unicode_minus'] = False
+
 
 class SpectralAnalysisReport:
     def __init__(self, dataset, output_path='spectral_analysis_report.pdf'):
         """
         初始化光谱数据分析报告类
         """
-        if '光谱' not in dataset:
-            raise KeyError("数据集中必须包含'光谱'数据")
+        # matplotlib.rcParams['font.family'] = ['sans-serif']
+        # matplotlib.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial Unicode MS', 
+        #                                         'Microsoft YaHei', 'WenQuanYi Micro Hei']
+        # matplotlib.rcParams['axes.unicode_minus'] = False
+        # if '光谱' not in dataset:
+        #     raise KeyError("数据集中必须包含'光谱'数据")
         
+        # 设置matplotlib中文字体
+        plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'WenQuanYi Micro Hei', 'DejaVu Sans', 'Arial Unicode MS']
+        plt.rcParams['axes.unicode_minus'] = False
+        
+        # 获取系统中可用的中文字体
+        font_paths = []
+        
+        # Windows系统字体路径
+   
+            
+        # Linux系统字体路径
+        if os.name == 'posix':
+            font_paths.extend([
+                '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc',
+                
+                os.path.expanduser('~/.fonts')
+            ])
+            
+        # macOS系统字体路径
+        elif sys.platform == 'darwin':
+            font_paths.extend([
+                '/System/Library/Fonts',
+                '/Library/Fonts',
+                os.path.expanduser('~/Library/Fonts')
+            ])
+            
+        # 加载系统字体
+        for font_path in font_paths:
+            if os.path.exists(font_path):
+                matplotlib.font_manager.fontManager.addfont(font_path)
         self.dataset = dataset
         self.output_path = output_path
         self.spectral_data = dataset['光谱']
@@ -67,7 +102,7 @@ class SpectralAnalysisReport:
         """配置中文字体"""
         try:
             # 尝试注册 Microsoft YaHei 字体
-            pdfmetrics.registerFont(TTFont('MyFont', 'msyh.ttc'))
+            pdfmetrics.registerFont(TTFont('MyFont', '/usr/share/fonts/truetype/wqy/wqy-microhei.ttc'))
         except:
             try:
                 # 尝试注册 SimSun 字体
@@ -144,15 +179,63 @@ class SpectralAnalysisReport:
         self.pdf_elements.append(table)
         self.pdf_elements.append(Spacer(1, 12))
 
+# ... existing code ...
     def figure_to_image(self, fig):
         """将matplotlib图形转换为reportlab图像"""
         buf = io.BytesIO()
-        fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+        
+        # 获取PDF页面的可用空间
+        available_width = self.doc.width * 0.9  # 留出10%边距
+        available_height = self.doc.height * 0.6  # 留出40%用于其他内容
+        
+        # 计算当前图像尺寸
+        fig_size = fig.get_size_inches()
+        dpi = 100  # 降低DPI以减小文件大小
+        
+        # 计算图像的实际像素尺寸
+        img_width = fig_size[0] * dpi
+        img_height = fig_size[1] * dpi
+        
+        # 计算缩放比例
+        width_ratio = available_width / img_width
+        height_ratio = available_height / img_height
+        scale = min(width_ratio, height_ratio, 1.0)  # 不要放大，只缩小
+        
+        # 设置中文字体
+        
+ # 保存图像前确保所有文本元素使用中文字体
+        # for text_obj in fig.findobj(match=lambda x: hasattr(x, 'get_text')):
+        #     try:
+        #         text_obj.set_fontproperties(plt.font_manager.FontProperties(
+        #             family=['SimHei', 'Microsoft YaHei', 'WenQuanYi Micro Hei', 'sans-serif']
+        #         ))
+        #     except:
+        #         pass
+                
+        # 保存图像
+        fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
+                   pad_inches=0.1)
+    
+        # plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Bitstream Vera Sans', 
+        #                                 'Computer Modern Sans Serif', 'Lucida Grande', 
+        #                                 'Verdana', 'Geneva', 'Lucid', 'Arial', 
+        #                                 'Helvetica', 'Avant Garde', 'sans-serif']
+        # plt.rcParams['axes.unicode_minus'] = False
+        
+        # # 保存图像时指定额外的字体设置
+        # fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
+        #             # fonttype=3,  # 使用Type 3字体，可以更好地支持中文
+        #             pad_inches=0.1)
+        
         buf.seek(0)
         img = Image(buf)
-        img.drawHeight = 4*inch
-        img.drawWidth = 6*inch
+        
+        # 设置图像在PDF中的显示尺寸
+        img.drawWidth = img_width * scale
+        img.drawHeight = img_height * scale
+        
         return img
+# ... existing code ...
 
     def analyze_and_generate_report(self):
         try:
@@ -168,6 +251,9 @@ class SpectralAnalysisReport:
 
             self.add_heading("数据关系分析", 2)
             self._plot_data_relationships()
+
+            self.add_heading("两两分布", 2)
+            self._plot_pairwise_relationships()
             
             # 2. 光谱数据分析
             self.add_heading("2. 光谱数据分析", 2)
@@ -478,194 +564,476 @@ class SpectralAnalysisReport:
         label_columns = [key for key in self.dataset.keys() if key != '光谱']
         
         for label_column in label_columns:
-            # 创建图形
-            fig = plt.figure(figsize=(15, 10))
-            gs = plt.GridSpec(2, 1, height_ratios=[3, 1], hspace=0.3)
-            
-            # 上方子图：按标签分组的光谱
-            ax1 = plt.subplot(gs[0])
-            
-            # 获取唯一的标签值
-            unique_labels = np.unique(self.dataset[label_column])
-            
-            # 为不同标签设置不同的颜色
-            colors = plt.cm.rainbow(np.linspace(0, 1, len(unique_labels)))
-            
-            # 为每个标签绘制光谱
-            for label, color in zip(unique_labels, colors):
-                # 获取该标签对应的光谱数据索引
-                mask = self.dataset[label_column] == label
-                label_spectra = self.spectral_data[mask]
-                
-                # 计算该标签的平均光谱和标准差
-                label_mean = np.mean(label_spectra, axis=0)
-                label_std = np.std(label_spectra, axis=0)
-                
-                # 绘制该标签的所有光谱（透明度较高）
-                alpha_value = max(0.05, 1.0 / np.sqrt(len(label_spectra)))
-                for spectrum in label_spectra:
-                    ax1.plot(spectrum, '-', color=color, alpha=alpha_value, linewidth=0.5)
-                
-                # 绘制该标签的平均光谱（不透明）
-                ax1.plot(label_mean, '-', color=color, linewidth=2, 
-                        label=f'{label_column}={label} (n={len(label_spectra)})')
-                
-                # 绘制标准差范围
-                ax1.fill_between(range(len(label_mean)),
-                            label_mean - label_std,
-                            label_mean + label_std,
-                            color=color, alpha=0.2)
-            
-            # 设置上方子图的标签和标题
-            ax1.set_title(f'按{label_column}分组的光谱数据')
-            ax1.set_xlabel('波长索引')
-            ax1.set_ylabel('光谱强度')
-            ax1.grid(True, alpha=0.3)
-            ax1.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-            
-            # 下方子图：各组的变异系数
-            ax2 = plt.subplot(gs[1])
-            
-            # 为每个标签计算和绘制变异系数
-            for label, color in zip(unique_labels, colors):
-                mask = self.dataset[label_column] == label
-                label_spectra = self.spectral_data[mask]
-                
-                # 计算变异系数
-                label_mean = np.mean(label_spectra, axis=0)
-                label_std = np.std(label_spectra, axis=0)
-                cv = label_std / np.abs(label_mean) * 100
-                
-                # 绘制变异系数
-                ax2.plot(cv, '-', color=color, label=f'{label_column}={label}')
-            
-            # 设置下方子图的标签
-            ax2.set_xlabel('波长索引')
-            ax2.set_ylabel('变异系数 (%)')
-            ax2.grid(True, alpha=0.3)
-            ax2.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-            
-            # 为每个标签添加统计信息
-            stats_table = [['标签值', '样本数', '平均强度', '标准差', '平均变异系数(%)']]
-            for label in unique_labels:
-                mask = self.dataset[label_column] == label
-                label_spectra = self.spectral_data[mask]
-                
-                mean_intensity = np.mean(label_spectra)
-                std_intensity = np.std(label_spectra)
-                mean_cv = np.mean(np.std(label_spectra, axis=0) / 
-                                np.abs(np.mean(label_spectra, axis=0))) * 100
-                
-                stats_table.append([
-                    str(label),
-                    str(len(label_spectra)),
-                    f"{mean_intensity:.4f}",
-                    f"{std_intensity:.4f}",
-                    f"{mean_cv:.2f}"
-                ])
-            
-            plt.tight_layout()
-            self.pdf_elements.append(self.figure_to_image(fig))
-            plt.close(fig)
-            
-            # 添加该标签的统计表格
-            self.add_paragraph(f"\n{label_column}分组统计：")
-            self.add_table(stats_table)
-
- # 分析不同模型的预测性能
-    def _analyze_models(self):
-            """分析不同模型的预测性能"""
-            # 准备数据
-            chemical_features = {}
-            for key, value in self.dataset.items():
-                if key != '光谱' and value.dtype.kind in 'iufc':
-                    chemical_features[key] = value
-            
-            if not chemical_features:
-                return
-                
-            spectral_data = self.spectral_data
-            
-            for target_name, target_values in chemical_features.items():
-                self.add_heading(f"{target_name}的模型预测分析", 3)
-                
-                # 划分训练集和测试集
-                X_train, X_test, y_train, y_test = train_test_split(
-                    spectral_data, target_values, test_size=0.2, random_state=42
-                )
-                
-                # 定义模型列表
-                models = {
-                    'PLS回归': PLSRegression(n_components=10),
-                    '随机森林': RandomForestRegressor(n_estimators=100, random_state=42),
-                    'SVR': SVR(kernel='rbf'),
-                    '线性回归': LinearRegression()
-                }
-                
-                # 评估结果存储
-                results = {}
-                
+            try:
                 # 创建图形
-                fig = plt.figure(figsize=(16, 12))
                 
-                for i, (name, model) in enumerate(models.items(), 1):
-                    # 训练模型
-                    model.fit(X_train, y_train)
+                # 获取唯一的标签值
+                unique_labels = np.unique(self.dataset[label_column])
+                
+                # 为不同标签设置不同的颜色
+                colors = plt.cm.rainbow(np.linspace(0, 1, len(unique_labels)))
+                fig = plt.figure(figsize=(15, 10))
+                gs = plt.GridSpec(2, 1, height_ratios=[3, 1], hspace=0.3)
+                
+                # 上方子图：按标签分组的光谱
+                ax1 = plt.subplot(gs[0])
+                
+                # 为每个标签绘制光谱
+                for label, color in zip(unique_labels, colors):
+                    # 获取该标签对应的光谱数据索引
+                    mask = self.dataset[label_column] == label
+                    label_spectra = self.spectral_data[mask]
                     
-                    # 预测
-                    y_pred = model.predict(X_test)
+                    # 计算该标签的平均光谱和标准差
+                    label_mean = np.mean(label_spectra, axis=0)
+                    label_std = np.std(label_spectra, axis=0)
                     
-                    # 计算评估指标
-                    r2 = r2_score(y_test, y_pred)
-                    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-                    mae = mean_absolute_error(y_test, y_pred)
+                    # 绘制该标签的所有光谱（透明度较高）
+                    alpha_value = max(0.05, 1.0 / np.sqrt(len(label_spectra)))
+                    for spectrum in label_spectra:
+                        ax1.plot(spectrum, '-', color=color, alpha=alpha_value, linewidth=0.5)
                     
-                    results[name] = {
-                        'R2': r2,
-                        'RMSE': rmse,
-                        'MAE': mae
-                    }
+                    # 绘制该标签的平均光谱（不透明）
+                    ax1.plot(label_mean, '-', color=color, linewidth=2, 
+                            label=f'{label_column}={label} (n={len(label_spectra)})')
                     
-                    # 在子图中绘制散点图
-                    plt.subplot(2, 2, i)
-                    plt.scatter(y_test, y_pred, alpha=0.5)
-                    plt.plot([y_test.min(), y_test.max()], 
-                            [y_test.min(), y_test.max()], 
-                            'r--', lw=2)
-                    plt.xlabel('实际值')
-                    plt.ylabel('预测值')
-                    plt.title(f'{name}预测结果散点图')
+                    # 绘制标准差范围
+                    ax1.fill_between(range(len(label_mean)),
+                                label_mean - label_std,
+                                label_mean + label_std,
+                                color=color, alpha=0.2)
+                
+                # 设置上方子图的标签和标题
+                ax1.set_title(f'按{label_column}分组的光谱数据')
+                ax1.set_xlabel('波长索引')
+                ax1.set_ylabel('光谱强度')
+                ax1.grid(True, alpha=0.3)
+                ax1.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+                
+                # 下方子图：各组的变异系数
+                ax2 = plt.subplot(gs[1])
+                
+                # 为每个标签计算和绘制变异系数
+                for label, color in zip(unique_labels, colors):
+                    mask = self.dataset[label_column] == label
+                    label_spectra = self.spectral_data[mask]
                     
-                    # 添加评估指标文本
-                    plt.text(0.05, 0.95, 
-                            f'R2 = {r2:.3f}\nRMSE = {rmse:.3f}\nMAE = {mae:.3f}',
-                            transform=plt.gca().transAxes,
-                            bbox=dict(facecolor='white', alpha=0.8),
-                            verticalalignment='top')
+                    # 计算变异系数
+                    label_mean = np.mean(label_spectra, axis=0)
+                    label_std = np.std(label_spectra, axis=0)
+                    cv = label_std / np.abs(label_mean) * 100
+                    
+                    # 绘制变异系数
+                    ax2.plot(cv, '-', color=color, label=f'{label_column}={label}')
+                
+                # 设置下方子图的标签
+                ax2.set_xlabel('波长索引')
+                ax2.set_ylabel('变异系数 (%)')
+                ax2.grid(True, alpha=0.3)
+                ax2.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+                
+                # 为每个标签添加统计信息
+                stats_table = [['标签值', '样本数', '平均强度', '标准差', '平均变异系数(%)']]
+                for label in unique_labels:
+                    mask = self.dataset[label_column] == label
+                    label_spectra = self.spectral_data[mask]
+                    
+                    mean_intensity = np.mean(label_spectra)
+                    std_intensity = np.std(label_spectra)
+                    mean_cv = np.mean(np.std(label_spectra, axis=0) / 
+                                    np.abs(np.mean(label_spectra, axis=0))) * 100
+                    
+                    stats_table.append([
+                        str(label),
+                        str(len(label_spectra)),
+                        f"{mean_intensity:.4f}",
+                        f"{std_intensity:.4f}",
+                        f"{mean_cv:.2f}"
+                    ])
                 
                 plt.tight_layout()
                 self.pdf_elements.append(self.figure_to_image(fig))
                 plt.close(fig)
                 
-                # 添加结果表格
-                results_table = [['模型', 'R2得分', 'RMSE', 'MAE']]
-                for name, metrics in results.items():
-                    results_table.append([
-                        name,
-                        f"{metrics['R2']:.3f}",
-                        f"{metrics['RMSE']:.3f}",
-                        f"{metrics['MAE']:.3f}"
-                    ])
-                
-                self.add_table(results_table)
-                
-                # 找出最佳模型
-                best_model = max(results.items(), key=lambda x: x[1]['R2'])
-                self.add_paragraph(f"\n最佳模型为: {best_model[0]}")
-                self.add_paragraph(f"- R2得分: {best_model[1]['R2']:.3f}")
-                self.add_paragraph(f"- RMSE: {best_model[1]['RMSE']:.3f}")
-                self.add_paragraph(f"- MAE: {best_model[1]['MAE']:.3f}")
+                # 添加该标签的统计表格
+                self.add_paragraph(f"\n{label_column}分组统计：")
+                self.add_table(stats_table)
+            except Exception as e:
+                print(f"{sys._getframe().f_lineno}: draw spectra failed: {str(e)}")
 
+    def _analyze_models(self):
+        """分析不同数据类型的预测建模，支持基于分类变量的分组分析"""
+        # 准备数据
+        chemical_features = {}
+        categorical_features = {}
+        
+        for key, value in self.dataset.items():
+            if key != '光谱':
+                if pd.api.types.is_numeric_dtype(value):
+                    chemical_features[key] = value
+                else:
+                    try:
+                        # 尝试转换为数值类型
+                        numeric_value = pd.to_numeric(value)
+                        chemical_features[key] = numeric_value
+                    except:
+                        categorical_features[key] = value
+        
+        if not chemical_features:
+            return
+        
+        spectral_data = self.spectral_data
+        # 对每个数值特征进行预测分析
+        for target_name, target_values in chemical_features.items():
+            self.add_heading(f"{target_name}的模型预测分析", 3)
+            
+            # 1. 使用光谱数据进行常规预测
+            self.add_heading("基于光谱数据的预测", 4)
+            spectral_prediction = self._analyze_with_spectral(
+                spectral_data, 
+                target_values,
+                target_name
+            )
+            
+            # 2. 对每个分类变量进行分组预测分析
+            if categorical_features:
+                for cat_name, cat_values in categorical_features.items():
+                    try:
+                        self.add_heading(f"按{cat_name}分组的{target_name}预测分析", 4)
+                        self._analyze_by_group(
+                            spectral_data,
+                            target_values,
+                            cat_values,
+                            target_name,
+                            cat_name
+                        )
+                    except Exception as e:
+                        print(f"{sys._getframe().f_lineno}: analyze by group failed: {str(e)}")
+                    
+
+            # 3. 如果有日期数据，进行时间序列分析
+            if '采集日期' in self.dataset:
+                self.add_heading(f"{target_name}的时间序列预测分析", 4)
+                time_values = pd.to_datetime(self.dataset['采集日期'])
+                try:
+                    self._analyze_by_time(
+                        spectral_data,
+                        target_values,
+                        time_values,
+                        target_name,
+                        '采集日期'
+                    )
+                except Exception as e:
+                    print(f"{sys._getframe().f_lineno}: analyze by time failed: {str(e)}")
+
+    def _categorize_features(self):
+        """将数据集特征分类为不同类型"""
+        feature_types = {
+            'numeric': {},    # 连续数值型特征
+            'categorical': {}, # 离散分类型特征
+            'temporal': {},   # 时间型特征
+            'spectral': {}    # 光谱数据
+        }
+        
+        for key, value in self.dataset.items():
+            if key == '光谱':
+                feature_types['spectral'][key] = {
+                    'data': value,
+                    'shape': value.shape
+                }
+                continue
+            
+            # 尝试转换为日期类型
+            try:
+                pd.to_datetime(value)
+                feature_types['temporal'][key] = {
+                    'data': pd.to_datetime(value),
+                    'unique_count': len(pd.unique(value))
+                }
+                continue
+            except:
+                pass
+            
+            # 检查是否为数值型
+            if pd.api.types.is_numeric_dtype(value):
+                feature_types['numeric'][key] = {
+                    'data': value,
+                    'mean': np.mean(value),
+                    'std': np.std(value),
+                    'unique_count': len(pd.unique(value))
+                }
+            else:
+                # 非数值型视为分类变量
+                feature_types['categorical'][key] = {
+                    'data': value,
+                    'unique_count': len(pd.unique(value)),
+                    'categories': pd.unique(value)
+                }
+        
+        return feature_types
+
+    def _analyze_with_spectral(self, spectral_data, target_values, target_name):
+        """使用光谱数据进行预测分析"""
+        # 定义模型
+        models = {
+            'PLS回归': PLSRegression(n_components=10),
+            '随机森林': RandomForestRegressor(n_estimators=100, random_state=42),
+            'SVR': SVR(kernel='rbf'),
+            '线性回归': LinearRegression()
+        }
+        
+        # 划分训练集和测试集
+        X_train, X_test, y_train, y_test = train_test_split(
+            spectral_data, target_values, test_size=0.2, random_state=42
+        )
+        
+        results = {}
+        fig = plt.figure(figsize=(16, 12))
+        
+        for i, (name, model) in enumerate(models.items(), 1):
+            # 训练和预测
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
+            
+            # 计算评估指标
+            r2 = r2_score(y_test, y_pred)
+            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+            mae = mean_absolute_error(y_test, y_pred)
+            
+            results[name] = {'R2': r2, 'RMSE': rmse, 'MAE': mae}
+            
+            # 绘制预测散点图
+            plt.subplot(2, 2, i)
+            plt.scatter(y_test, y_pred, alpha=0.5)
+            plt.plot([y_test.min(), y_test.max()], 
+                    [y_test.min(), y_test.max()], 
+                    'r--', lw=2)
+            plt.xlabel('实际值')
+            plt.ylabel('预测值')
+            plt.title(f'{name}预测结果')
+            
+            plt.text(0.05, 0.95, 
+                    f'R2 = {r2:.3f}\nRMSE = {rmse:.3f}\nMAE = {mae:.3f}',
+                    transform=plt.gca().transAxes,
+                    bbox=dict(facecolor='white', alpha=0.8),
+                    verticalalignment='top')
+        
+        plt.tight_layout()
+        self.pdf_elements.append(self.figure_to_image(fig))
+        plt.close(fig)
+        
+        # 添加结果表格
+        results_table = [['模型', 'R2得分', 'RMSE', 'MAE']]
+        for name, metrics in results.items():
+            results_table.append([
+                name,
+                f"{metrics['R2']:.3f}",
+                f"{metrics['RMSE']:.3f}",
+                f"{metrics['MAE']:.3f}"
+            ])
+        
+        self.add_table(results_table)
+        return results
+
+    def _analyze_by_group(self, spectral_data, target_values, group_values, 
+                        target_name, group_name):
+        """按分组进行预测分析"""
+        self.add_heading(f"按{group_name}分组的{target_name}预测分析", 4)
+        
+        unique_groups = np.unique(group_values)
+        group_results = {}
+        
+        # 创建分组结果图
+        n_groups = len(unique_groups)
+        n_cols = min(2, n_groups)
+        n_rows = (n_groups + 1) // 2
+        fig = plt.figure(figsize=(15 * n_cols, 10 * n_rows))
+        
+        for idx, group in enumerate(unique_groups, 1):
+            # 获取该组的数据
+            mask = group_values == group
+            group_spectral = spectral_data[mask]
+            group_target = target_values[mask]
+            
+            if len(group_target) < 10:  # 样本太少的组跳过
+                continue
+            
+            # 为该组训练模型
+            X_train, X_test, y_train, y_test = train_test_split(
+                group_spectral, group_target, test_size=0.2, random_state=42
+            )
+            
+            # 使用PLS回归作为示例模型
+            model = PLSRegression(n_components=10)
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
+            
+            # 计算性能指标
+            r2 = r2_score(y_test, y_pred)
+            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+            mae = mean_absolute_error(y_test, y_pred)
+            
+            group_results[group] = {'R2': r2, 'RMSE': rmse, 'MAE': mae}
+            
+            # 绘制该组的预测结果
+            plt.subplot(n_rows, n_cols, idx)
+            plt.scatter(y_test, y_pred, alpha=0.5)
+            plt.plot([y_test.min(), y_test.max()], 
+                    [y_test.min(), y_test.max()], 
+                    'r--', lw=2)
+            plt.xlabel('实际值')
+            plt.ylabel('预测值')
+            plt.title(f'{group_name}={group}的预测结果')
+            
+            plt.text(0.05, 0.95, 
+                    f'样本数: {len(group_target)}\n'
+                    f'R2 = {r2:.3f}\n'
+                    f'RMSE = {rmse:.3f}\n'
+                    f'MAE = {mae:.3f}',
+                    transform=plt.gca().transAxes,
+                    bbox=dict(facecolor='white', alpha=0.8),
+                    verticalalignment='top')
+        
+        plt.tight_layout()
+        self.pdf_elements.append(self.figure_to_image(fig))
+        plt.close(fig)
+        
+        # 添加分组比较表格
+        comparison_table = [[f'{group_name}', '样本数', 'R2得分', 'RMSE', 'MAE']]
+        for group, metrics in group_results.items():
+            comparison_table.append([
+                str(group),
+                str(len(spectral_data[group_values == group])),
+                f"{metrics['R2']:.3f}",
+                f"{metrics['RMSE']:.3f}",
+                f"{metrics['MAE']:.3f}"
+            ])
+        
+        self.add_table(comparison_table)
+
+    def _analyze_by_time(self, spectral_data, target_values, time_values, 
+                        target_name, time_name):
+        """按时间进行预测分析"""
+        self.add_heading(f"基于{time_name}的{target_name}时间序列预测分析", 4)
+        
+        # 将数据按时间排序
+        sorted_indices = np.argsort(time_values)
+        sorted_spectral = spectral_data[sorted_indices]
+        sorted_target = target_values[sorted_indices]
+        sorted_time = time_values[sorted_indices]
+        
+        # 按时间划分训练集和测试集（使用最后20%的数据作为测试集）
+        split_idx = int(len(sorted_target) * 0.8)
+        X_train = sorted_spectral[:split_idx]
+        X_test = sorted_spectral[split_idx:]
+        y_train = sorted_target[:split_idx]
+        y_test = sorted_target[split_idx:]
+        time_test = sorted_time[split_idx:]
+        
+        # 训练模型
+        model = PLSRegression(n_components=10)
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        
+        # 计算性能指标
+        r2 = r2_score(y_test, y_pred)
+        rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+        mae = mean_absolute_error(y_test, y_pred)
+        
+        # 绘制时间序列预测结果
+        fig = plt.figure(figsize=(15, 8))
+        plt.scatter(time_test, y_test, label='实际值', alpha=0.5)
+        plt.scatter(time_test, y_pred, label='预测值', alpha=0.5)
+        plt.xlabel(time_name)
+        plt.ylabel(target_name)
+        plt.title(f'{target_name}的时间序列预测')
+        plt.xticks(rotation=45)
+        plt.legend()
+        
+        plt.text(0.05, 0.95, 
+                f'R2 = {r2:.3f}\n'
+                f'RMSE = {rmse:.3f}\n'
+                f'MAE = {mae:.3f}',
+                transform=plt.gca().transAxes,
+                bbox=dict(facecolor='white', alpha=0.8),
+                verticalalignment='top')
+        
+        plt.tight_layout()
+        self.pdf_elements.append(self.figure_to_image(fig))
+        plt.close(fig)
+
+    def _plot_pairwise_relationships(self):
+        """绘制数据集中变量的分组分布图"""
+        # 获取所有数值型变量和分类变量
+        numeric_data = {}
+        categorical_data = {}
+        for key, value in self.dataset.items():
+            if key != '光谱':
+                if pd.api.types.is_numeric_dtype(value):
+                    numeric_data[key] = value
+                else:
+                    try:
+                        pd.to_datetime(value)  # 尝试转换为日期
+                        categorical_data[key] = value
+                    except:
+                        categorical_data[key] = value
+        
+        if len(numeric_data) < 1 or len(categorical_data) < 1:
+            self.add_paragraph("数据集中缺少足够的数值型或分类变量,无法绘制分组分布图。")
+            return
+            
+        # 创建数据框
+        df = pd.DataFrame({**numeric_data, **categorical_data})
+        
+        # 为每个数值变量和分类变量的组合创建分布图
+        for num_col in numeric_data.keys():
+            for cat_col in categorical_data.keys():
+                fig = plt.figure(figsize=(15, 6))
+                
+                # 创建子图
+                plt.subplot(1, 2, 1)
+                # 按组绘制核密度估计图
+                for group in df[cat_col].unique():
+                    group_data = df[df[cat_col] == group][num_col]
+                    sns.kdeplot(data=group_data, label=str(group))
+                plt.title(f'{num_col}在不同{cat_col}下的密度分布')
+                plt.xlabel(num_col)
+                plt.ylabel('密度')
+                plt.legend()
+                
+                plt.subplot(1, 2, 2)
+                # 按组绘制小提琴图
+                sns.violinplot(x=cat_col, y=num_col, data=df)
+                plt.title(f'{num_col}在不同{cat_col}下的分布')
+                plt.xticks(rotation=45)
+                
+                plt.tight_layout()
+                
+                # 添加到PDF
+                self.pdf_elements.append(self.figure_to_image(fig))
+                plt.close(fig)
+                
+                # 添加分组描述性统计
+                self.add_paragraph(f"\n{num_col}按{cat_col}分组的统计描述:")
+                stats_table = [['组别', '样本数', '均值', '标准差', '最小值', '25%分位数', '中位数', '75%分位数', '最大值']]
+                
+                for group in df[cat_col].unique():
+                    group_data = df[df[cat_col] == group][num_col]
+                    if len(group_data) > 0:
+                        stats = group_data.describe()
+                        stats_table.append([
+                            str(group),
+                            f"{stats['count']:.0f}",
+                            f"{stats['mean']:.3f}",
+                            f"{stats['std']:.3f}",
+                            f"{stats['min']:.3f}",
+                            f"{stats['25%']:.3f}",
+                            f"{stats['50%']:.3f}",
+                            f"{stats['75%']:.3f}",
+                            f"{stats['max']:.3f}"
+                        ])
+                    
+                self.add_table(stats_table)
 
     def _analyze_dataset_info(self):
         """分析数据集基本信息"""
@@ -1188,6 +1556,7 @@ def search_system_fonts():
 
 # 使用示例
 if __name__ == "__main__":
+    now_time = datetime.datetime.now()
     try:
         # 加载数据
         from nirapi.load_data import *
@@ -1223,3 +1592,4 @@ if __name__ == "__main__":
     finally:
         # 清理matplotlib图形
         plt.close('all')
+        print(f"程序执行时间: {(datetime.datetime.now() - now_time).total_seconds() / 60:.2f}分钟")

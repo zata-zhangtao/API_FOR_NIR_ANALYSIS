@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 import seaborn as sns
-from datetime import datetime
 from matplotlib.backends.backend_pdf import PdfPages
 import io
 from reportlab.pdfgen import canvas

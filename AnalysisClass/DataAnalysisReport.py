@@ -323,6 +323,11 @@ class SpectralAnalysisReport:
         """绘制任意两个数据类型之间的关系图"""
         # 获取所有可用于绘图的数据列
         plottable_data = {}
+        # 添加光谱强度
+        spectral_intensities = np.mean(self.dataset['光谱'], axis=1)
+        plottable_data['光谱强度'] =  pd.to_numeric(spectral_intensities, errors='coerce')
+        
+        
         for key, value in self.dataset.items():
             if key != '光谱':  # 排除光谱数据
                 try:
@@ -453,9 +458,14 @@ class SpectralAnalysisReport:
                         
                         # 创建交叉表
                         contingency_table = pd.crosstab(df_temp['var1'], df_temp['var2'])
-                        # 检查表格大小，调整可视化参数
+                        
+                        # 创建带有子图的图形
+                        fig = plt.figure(figsize=(15, 10))
+                        gs = plt.GridSpec(2, 2, width_ratios=[0.2, 0.8], height_ratios=[0.8, 0.2])
+                        
+                        # 主热力图
+                        ax_main = plt.subplot(gs[0, 1])
                         if contingency_table.shape[0] * contingency_table.shape[1] > 100:
-                            plt.figure(figsize=(20, 12))
                             sns.heatmap(contingency_table, annot=True, fmt='d', cmap='YlOrRd',
                                       annot_kws={'size': 8})
                         else:
@@ -464,12 +474,25 @@ class SpectralAnalysisReport:
                         plt.xticks(rotation=45, ha='right')
                         plt.yticks(rotation=0)
                         
+                        # 左侧柱状图（var1的分布）
+                        ax_left = plt.subplot(gs[0, 0])
+                        var1_counts = df_temp['var1'].value_counts()
+                        ax_left.barh(range(len(var1_counts)), var1_counts.values)
+                        ax_left.set_yticks([])
+                        ax_left.invert_xaxis()
+                        
+                        # 底部柱状图（var2的分布）
+                        ax_bottom = plt.subplot(gs[1, 1])
+                        var2_counts = df_temp['var2'].value_counts()
+                        ax_bottom.bar(range(len(var2_counts)), var2_counts.values)
+                        ax_bottom.set_xticks([])
+                        
                         # 进行卡方检验
                         if contingency_table.shape[0] > 1 and contingency_table.shape[1] > 1:
                             chi2, p_val, dof, expected = scipy.stats.chi2_contingency(contingency_table)
                             plt.text(1.05, 0.95,
                                    f'卡方检验:\n统计量: {chi2:.3f}\np值: {p_val:.3e}',
-                                   transform=plt.gca().transAxes,
+                                   transform=ax_main.transAxes,
                                    bbox=dict(facecolor='white', alpha=0.8))
                     except Exception as e:
                         plt.text(0.5, 0.5, f'无法创建热力图: {str(e)}',
@@ -486,9 +509,9 @@ class SpectralAnalysisReport:
                     except:
                         pass
 
-                plt.title(f'{key1} vs {key2}的关系图')
-                plt.xlabel(key1)
-                plt.ylabel(key2)
+                # plt.title(f'{key1} vs {key2} relationship')
+                plt.xlabel(key2)
+                plt.ylabel(key1)
                 plt.grid(True, alpha=0.3)
                 
                 # 调整布局以避免标签重叠
@@ -572,8 +595,8 @@ class SpectralAnalysisReport:
                 
                 # 为不同标签设置不同的颜色
                 colors = plt.cm.rainbow(np.linspace(0, 1, len(unique_labels)))
-                fig = plt.figure(figsize=(15, 10))
-                gs = plt.GridSpec(2, 1, height_ratios=[3, 1], hspace=0.3)
+                fig = plt.figure(figsize=(15, 20))
+                gs = plt.GridSpec(4, 1, height_ratios=[3, 1, 1, 1], hspace=0.3)
                 
                 # 上方子图：按标签分组的光谱
                 ax1 = plt.subplot(gs[0])
@@ -610,8 +633,63 @@ class SpectralAnalysisReport:
                 ax1.grid(True, alpha=0.3)
                 ax1.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
                 
-                # 下方子图：各组的变异系数
+                # 中间子图：各组的均值
                 ax2 = plt.subplot(gs[1])
+                
+                # 为每个标签绘制均值
+                for label, color in zip(unique_labels, colors):
+                    mask = self.dataset[label_column] == label
+                    label_spectra = self.spectral_data[mask]
+                    
+                    # 计算均值
+                    label_mean = np.mean(label_spectra, axis=0)
+                    
+                    # 绘制均值
+                    ax2.plot(label_mean, '-', color=color, label=f'{label_column}={label}')
+                
+                # 设置中间子图的标签
+                ax2.set_xlabel('波长索引')
+                ax2.set_ylabel('均值')
+                ax2.grid(True, alpha=0.3)
+                ax2.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+                
+                # 第三个子图：归一化后的均值
+                ax4 = plt.subplot(gs[2])
+                
+                # 收集所有标签的均值数据
+                all_means = []
+                for label in unique_labels:
+                    mask = self.dataset[label_column] == label
+                    label_spectra = self.spectral_data[mask]
+                    label_mean = np.mean(label_spectra, axis=0)
+                    all_means.append(label_mean)
+                
+                # 将所有均值数据转换为numpy数组
+                all_means = np.array(all_means)
+                
+                # 对每个特征(波长点)分别进行归一化
+                normalized_means = np.zeros_like(all_means)
+                for feature_idx in range(all_means.shape[1]):  # 遍历每个特征(波长点)
+                    feature_values = all_means[:, feature_idx]  # 获取所有label在该特征上的值
+                    max_val = np.max(feature_values)  # 该特征的最大值
+                    min_val = np.min(feature_values)  # 该特征的最小值
+                    if max_val != min_val:  # 避免除以零
+                        normalized_means[:, feature_idx] = (feature_values - min_val) / (max_val - min_val)
+                    else:
+                        normalized_means[:, feature_idx] = feature_values
+                
+                # 为每个标签绘制归一化后的均值
+                for label, color, norm_mean in zip(unique_labels, colors, normalized_means):
+                    ax4.plot(norm_mean, '-', color=color, label=f'{label_column}={label}')
+                
+                # 设置第三个子图的标签
+                ax4.set_xlabel('波长索引(特征)')
+                ax4.set_ylabel('归一化均值 (0-1)')
+                ax4.grid(True, alpha=0.3)
+                ax4.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+                
+                # 最下方子图：各组的变异系数
+                ax3 = plt.subplot(gs[3])
                 
                 # 为每个标签计算和绘制变异系数
                 for label, color in zip(unique_labels, colors):
@@ -624,14 +702,13 @@ class SpectralAnalysisReport:
                     cv = label_std / np.abs(label_mean) * 100
                     
                     # 绘制变异系数
-                    ax2.plot(cv, '-', color=color, label=f'{label_column}={label}')
+                    ax3.plot(cv, '-', color=color, label=f'{label_column}={label}')
                 
                 # 设置下方子图的标签
-                ax2.set_xlabel('波长索引')
-                ax2.set_ylabel('变异系数 (%)')
-                ax2.grid(True, alpha=0.3)
-                ax2.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-                
+                ax3.set_xlabel('波长索引')
+                ax3.set_ylabel('变异系数 (%)')
+                ax3.grid(True, alpha=0.3)
+                ax3.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
                 # 为每个标签添加统计信息
                 stats_table = [['标签值', '样本数', '平均强度', '标准差', '平均变异系数(%)']]
                 for label in unique_labels:
@@ -967,6 +1044,11 @@ class SpectralAnalysisReport:
         # 获取所有数值型变量和分类变量
         numeric_data = {}
         categorical_data = {}
+        
+        # 计算光谱强度(每个样本的均值)
+        spectral_intensities = np.mean(self.dataset['光谱'], axis=1)
+        numeric_data['光谱强度'] = spectral_intensities
+        
         for key, value in self.dataset.items():
             if key != '光谱':
                 if pd.api.types.is_numeric_dtype(value):
@@ -1427,7 +1509,8 @@ class SpectralAnalysisReport:
         daily_stats = daily_means.groupby('date').agg({
             'mean_intensity': ['mean', 'std', 'count']
         }).reset_index()
-        # 绘制时间序列图
+        
+        # 绘制时间序列图(带误差线)
         fig = plt.figure(figsize=(15, 6))
         plt.errorbar(daily_stats['date'],
                     daily_stats['mean_intensity']['mean'],
@@ -1436,7 +1519,7 @@ class SpectralAnalysisReport:
                     capsize=5)
         plt.xlabel('日期')
         plt.ylabel('平均光谱强度')
-        plt.title('光谱强度随时间的变化')
+        plt.title('光谱强度随时间的变化(每日统计)')
         plt.xticks(rotation=45)
         plt.grid(True)
         plt.tight_layout()
@@ -1444,6 +1527,102 @@ class SpectralAnalysisReport:
         # 将图形添加到PDF文档
         self.pdf_elements.append(self.figure_to_image(fig))
         plt.close(fig)
+        
+        # 绘制折线图(每个样本)
+        fig = plt.figure(figsize=(15, 6))
+        plt.plot(daily_means['date'], daily_means['mean_intensity'], 
+                'o-', alpha=0.5, markersize=5)
+        plt.xlabel('日期')
+        plt.ylabel('平均光谱强度')
+        plt.title('光谱强度随时间的变化(每个样本)')
+        plt.xticks(rotation=45)
+        plt.grid(True)
+        plt.tight_layout()
+        
+        # 将图形添加到PDF文档
+        self.pdf_elements.append(self.figure_to_image(fig))
+        plt.close(fig)
+
+        # 绘制按顺序的光谱强度图
+        fig = plt.figure(figsize=(15, 6))
+        plt.plot(daily_means['mean_intensity'], 'b-')
+        # 在每个日期变化点添加竖线
+        date_changes = np.where(daily_means['date'].diff() != pd.Timedelta(0))[0]
+        for idx in date_changes:
+            plt.axvline(x=idx, color='r', linestyle='--', alpha=0.5)
+        plt.xlabel('样本序号')
+        plt.ylabel('平均光谱强度')
+        plt.title('光谱强度按采集顺序变化')
+        plt.grid(True)
+        plt.tight_layout()
+        
+        # 将图形添加到PDF文档
+        self.pdf_elements.append(self.figure_to_image(fig))
+        plt.close(fig)
+
+        # 如果数据集中包含实测值,绘制实测值随时间变化的图
+        if '实测值' in self.dataset:
+            # 创建实测值时间序列数据
+            measured_data = pd.DataFrame({
+                'date': pd.to_datetime(self.dataset['采集日期']),
+                'measured_value': self.dataset['实测值']
+            })
+            
+            # 计算每日实测值统计
+            daily_measured = measured_data.groupby('date').agg({
+                'measured_value': ['mean', 'std', 'count']
+            }).reset_index()
+            
+            # 绘制实测值时间序列图(带误差线)
+            fig = plt.figure(figsize=(15, 6))
+            plt.errorbar(daily_measured['date'],
+                        daily_measured['measured_value']['mean'],
+                        yerr=daily_measured['measured_value']['std'],
+                        fmt='o-',
+                        capsize=5)
+            plt.xlabel('日期')
+            plt.ylabel('实测值')
+            plt.title('实测值随时间的变化(每日统计)')
+            plt.xticks(rotation=45)
+            plt.grid(True)
+            plt.tight_layout()
+            
+            # 将图形添加到PDF文档
+            self.pdf_elements.append(self.figure_to_image(fig))
+            plt.close(fig)
+            
+            # 绘制实测值散点图(每个样本)
+            fig = plt.figure(figsize=(15, 6))
+            plt.plot(measured_data['date'], measured_data['measured_value'], 
+                    'o-', alpha=0.5, markersize=5)
+            plt.xlabel('日期')
+            plt.ylabel('实测值')
+            plt.title('实测值随时间的变化(每个样本)')
+            plt.xticks(rotation=45)
+            plt.grid(True)
+            plt.tight_layout()
+            
+            # 将图形添加到PDF文档
+            self.pdf_elements.append(self.figure_to_image(fig))
+            plt.close(fig)
+            # 绘制按顺序的实测值变化图
+            fig = plt.figure(figsize=(15, 6))
+            plt.plot(measured_data['measured_value'], 'b-')
+            # 在每个日期变化点添加竖线
+            date_changes = np.where(measured_data['date'].diff() != pd.Timedelta(0))[0]
+            for idx in date_changes:
+                plt.axvline(x=idx, color='r', linestyle='--', alpha=0.5)
+            plt.xlabel('样本序号')
+            plt.ylabel('实测值')
+            plt.title('实测值按采集顺序变化')
+            plt.grid(True)
+            plt.tight_layout()
+            
+            # 将图形添加到PDF文档
+            self.pdf_elements.append(self.figure_to_image(fig))
+            plt.close(fig)
+
+
         
         return daily_stats
     

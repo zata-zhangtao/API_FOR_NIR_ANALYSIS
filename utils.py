@@ -1800,7 +1800,8 @@ def run_optuna_v4(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=N
         return np.mean(cv_scores)
 
 def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='r', save=None, save_name="", **kw):
-    # 2024-10-31 V5版本
+    # 2024-12-23 V5版本
+    # 2024-12-23修改了返回score的问题，返回的是除了训练集的score均值
     # 光谱数据的自动调参函数，可以自动调整选用建模过程中的哪些方法，参数。
     # V5版本不再支持随机划分数据，改为支持多数据集输入（一个训练多个测试），使用所有数据集的均值作为评估指标，修改了结果输出的格式，现在为保存json文件。
     # V4版本增加了交叉验证的功能
@@ -2244,9 +2245,10 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
         dataset_scores = {}
         try:
         # if True:
+            test_data_dict = data_dict.copy()
+            # del test_data_dict[train_key]
 
-
-            for dataset_key, (X_test, y_test) in data_dict.items():
+            for dataset_key, (X_test, y_test) in test_data_dict.items():
                 # 对测试数据应用相同的预处理步骤
                 X_test_processed = X_test.copy()
                 X_train_processed = X_train.copy()
@@ -2302,8 +2304,10 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
             # 存储结果
             trial.set_user_attr('dataset_scores', dataset_scores)
             
-            # 返回所有数据集评分的平均值作为优化目标
-            return np.mean([ds['score'] for ds in dataset_scores.values()])
+            # 返回除了训练数据集之外的所有数据集评分的平均值作为优化目标
+            # del dataset_scores[train_key]
+            return np.mean( [ds['score'] for key,ds in dataset_scores.items() if key is not train_key] )
+            # return np.mean([ds['score'] for ds in dataset_scores.values() ])
         except Exception as e:
             print(f"Error in trial {trial.number}: {str(e)}")
             return None

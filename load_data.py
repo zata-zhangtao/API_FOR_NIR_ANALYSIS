@@ -66,6 +66,19 @@ import json
 ######################################################   数据库的相关操作
 #############################################################################################################################################################################################
 
+def get_dataset_by_indices(dataset, indices):
+    """ first create in 12-19
+    get dataset by indices
+    参数:
+        dataset (dict): original dataset
+        indices (tuple): indices of dataset
+    返回:
+        dict: new dataset
+    """
+    new_dataset = {}
+    for key in dataset.keys():
+        new_dataset[key] = dataset[key][indices[0]]
+    return new_dataset
 
 
 def load_alcohol_data_for_volunteer(volunteer, condition):
@@ -400,9 +413,9 @@ def get_dataset_from_mysql(table_name:str, project_name:str, X_type:list, y_type
 
     '''
     if volunteer is None:
-        sql = f"SELECT {','.join(X_type)},理化值 FROM {table_name} WHERE 项目名称 = '{project_name}' AND  `创建时间` BETWEEN '{start_time}' AND '{end_time} 23:59:59'"
+        sql = f"SELECT {','.join(X_type)},理化值 FROM {table_name} WHERE 项目名称 = '{project_name}' AND  `采集日期` BETWEEN '{start_time}' AND '{end_time}' "
     else:
-        sql = f"SELECT {','.join(X_type)},理化值 FROM {table_name} WHERE 项目名称 = '{project_name}' AND  `创建时间` BETWEEN '{start_time}' AND '{end_time} 23:59:59' AND 志愿者 = '{volunteer}'"
+        sql = f"SELECT {','.join(X_type)},理化值 FROM {table_name} WHERE 项目名称 = '{project_name}' AND  `采集日期` BETWEEN '{start_time}' AND '{end_time} 23:59:59' AND 志愿者 = '{volunteer}'"
     data = get_data_from_mysql(sql,database)
     dataset = {}
     label = {}

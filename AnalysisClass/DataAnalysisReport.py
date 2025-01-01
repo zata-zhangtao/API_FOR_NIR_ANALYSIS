@@ -97,6 +97,7 @@ class SpectralAnalysisReport:
         self.styles = getSampleStyleSheet()
         self._setup_styles()
         self.pdf_elements = []
+        self.analyze_and_generate_report()
 
     def _setup_fonts(self):
         """配置中文字体"""
@@ -616,15 +617,15 @@ class SpectralAnalysisReport:
                     for spectrum in label_spectra:
                         ax1.plot(spectrum, '-', color=color, alpha=alpha_value, linewidth=0.5)
                     
-                    # 绘制该标签的平均光谱（不透明）
-                    ax1.plot(label_mean, '-', color=color, linewidth=2, 
-                            label=f'{label_column}={label} (n={len(label_spectra)})')
+                    # # 绘制该标签的平均光谱（不透明）
+                    # ax1.plot(label_mean, '-', color=color, linewidth=2, 
+                    #         label=f'{label_column}={label} (n={len(label_spectra)})')
                     
-                    # 绘制标准差范围
-                    ax1.fill_between(range(len(label_mean)),
-                                label_mean - label_std,
-                                label_mean + label_std,
-                                color=color, alpha=0.2)
+                    # # 绘制标准差范围
+                    # ax1.fill_between(range(len(label_mean)),
+                    #             label_mean - label_std,
+                    #             label_mean + label_std,
+                    #             color=color, alpha=0.2)
                 
                 # 设置上方子图的标签和标题
                 ax1.set_title(f'按{label_column}分组的光谱数据')

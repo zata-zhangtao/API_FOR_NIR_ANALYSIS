@@ -2020,9 +2020,9 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
     selected_outlier = ["不做异常值去除", "mahalanobis"]
     selected_preprocess = ["不做预处理", "mean_centering", "normalization", "standardization", 
                          "poly_detrend", "snv", "savgol", "msc","d1", "d2", "rnv", "move_avg"]
-    preprocess_number_input = 3
-    selected_feat_sec = ["不做特征选择"]
-    selected_dim_red = ["不做降维"]
+    preprocess_number_input = 1
+    selected_feat_sec = ["不做特征选择","corr_coefficient","anova","remove_high_variance_and_normalize","random_select"]
+    selected_dim_red = ["不做降维","pca"]
 
     # 更新参数（如果在kw中提供）
     if "selected_outlier" in kw: selected_outlier = kw["selected_outlier"]
@@ -2096,13 +2096,17 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
                     'threshold': trial.suggest_float('anova_threshold', 0.0, 1.0)}],
                 'fipls': [AF.fipls, {'n_intervals': trial.suggest_int('fipls_n_intervals', 1, 5),
                                     'interval_width': trial.suggest_float('fipls_interval_width', 10, 500),
-                                    'n_comp': trial.suggest_int('fipls_n_comp', 2, 20)}]
+                                    'n_comp': trial.suggest_int('fipls_n_comp', 2, 20)}],
+                'remove_high_variance_and_normalize':[AF.remove_high_variance_and_normalize, {'remove_feat_ratio': trial.suggest_float('remove_high_variance_and_normalize_remove_feat_ratio', 0.01, 0.5)}],
+                'random_select':[AF.random_select, {'min_features': trial.suggest_int('random_select_min_features', 1, 20),
+                                                    'max_features': trial.suggest_int('random_select_max_features', 1, 20),
+                                                    'random_seed': trial.suggest_int('random_select_random_seed', 1, 100)}],
             },
 
             'Dimensionality_reduction': {
                 '不做降维': [AF.return_inputs, {}],
                 'pca': [AF.pca, {'n_components': trial.suggest_int('pca_n_components', 1, 50)}],
-                'remove_high_variance_and_normalize':[AF.remove_high_variance_and_normalize, {'remove_feat_ratio': trial.suggest_float('remove_high_variance_and_normalize_remove_feat_ratio', 0.01, 0.5)}]
+                # 'remove_high_variance_and_normalize':[AF.remove_high_variance_and_normalize, {'remove_feat_ratio': trial.suggest_float('remove_high_variance_and_normalize_remove_feat_ratio', 0.01, 0.5)}]
             },
 
 
@@ -2206,54 +2210,36 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
         selection_steps[4] = choose_random_elements(selected_feat_sec, 0)
         selection_steps[7] = choose_random_elements(selected_dim_red, 0)
         selection_steps[5] = choose_random_elements(model_options, 0)
-        # 存储当前trial的选择步骤
+
+        # 获取每个步骤的参数
+        outlier_params = functions_["Pretreatment"][selection_steps[0]][1]
+        preprocess_params = [functions_["Preprocess"][step][1] for step in selection_steps[3]]
+        feat_selection_params = functions_["Feature_Selection"][selection_steps[4]][1]
+        dim_reduction_params = functions_["Dimensionality_reduction"][selection_steps[7]][1]
+        model_params = functions_["Model_Selection"][selection_steps[5]][1]
+
+        # 存储当前trial的选择步骤和参数
         trial.set_user_attr('selection_steps', {
-            'outlier': selection_steps[0],
-            'preprocess': selection_steps[3],
-            'feature_selection': selection_steps[4],
-            'dimensionality_reduction': selection_steps[7],
-            'model': selection_steps[5]
+            # 'outlier': [selection_steps[0], outlier_params],
+            'preprocess': [[step for step in selection_steps[3]], preprocess_params],
+            'feature_selection': [selection_steps[4], feat_selection_params],
+            'dimensionality_reduction': [selection_steps[7], dim_reduction_params],
+            'model': [selection_steps[5], model_params]
         })
 
         # 存储当前trial的处理流程
         temp_list_to_database[trial.number] = []
         
-        # # 应用预处理步骤到训练数据
-        # X_processed, y_processed = functions_["Pretreatment"][selection_steps[0]][0](
-        #     X_train, y_train, **functions_["Pretreatment"][selection_steps[0]][1]
-        # )
-
-        # # 应用其他预处理步骤
-        # for preprocess_step in selection_steps[3]:
-        #     X_processed, _, y_processed, _ = functions_["Preprocess"][preprocess_step][0](
-        #         X_processed, X_processed, y_processed, y_processed,
-        #         **functions_["Preprocess"][preprocess_step][1]
-        #     )
-
-        # # 特征选择和降维
-        # X_processed, _, y_processed, _ = functions_["Feature_Selection"][selection_steps[4]][0](
-        #     X_processed, X_processed, y_processed, y_processed,
-        #     **functions_["Feature_Selection"][selection_steps[4]][1]
-        # )
-
-        # X_processed, _, y_processed, _ = functions_["Dimensionality_reduction"][selection_steps[7]][0](
-        #     X_processed, X_processed, y_processed, y_processed,
-        #     **functions_["Dimensionality_reduction"][selection_steps[7]][1]
-        # )
-
         # 在所有数据集上进行预测和评估
         dataset_scores = {}
         try:
         # if True:
             test_data_dict = data_dict.copy()
-            # del test_data_dict[train_key]
 
             for dataset_key, (X_test, y_test) in test_data_dict.items():
                 # 对测试数据应用相同的预处理步骤
                 X_test_processed = X_test.copy()
                 X_train_processed = X_train.copy()
-                
-                
                 
                 for preprocess_step in selection_steps[3]:
                     X_train_processed, X_test_processed, y_train, y_test = functions_["Preprocess"][preprocess_step][0](
@@ -2269,7 +2255,6 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
                     X_train_processed, X_test_processed, y_train, y_test,
                     **functions_["Dimensionality_reduction"][selection_steps[7]][1]
                 )
-                
 
                 # 应用模型并预测
                 _, _, _, y_pred = functions_["Model_Selection"][selection_steps[5]][0](
@@ -2286,6 +2271,8 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
                     score = r2_score(y_test, y_pred)
                 elif selected_metric == 'r':
                     score = pearsonr(y_test, y_pred)[0]
+                elif selected_metric == 'rmse':
+                    score = np.sqrt(mean_squared_error(y_test, y_pred))
                 else:
                     from sklearn.metrics import accuracy_score, precision_score, recall_score
                     if selected_metric == 'accuracy':
@@ -2297,7 +2284,6 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
 
                 dataset_scores[dataset_key] = {
                     'score': score,
-                    # 'y_test': y_test,
                     'y_pred': y_pred.tolist(),
                 }
 
@@ -2391,6 +2377,191 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
         save=save,
         save_name=save_name
     )
+
+
+
+def rebuild_model_v2(splited_data=None, params_dict:dict=None):
+    """
+    V2版本，run_optuna_v5将参数和配置存储为字典，现在解析字典，因为字典中没有随机划分的参数，所有去掉X，y，智能使用splited_data
+    Rebuild the model based on the stored string of parameters and configuration.
+    
+    Params:
+        X: np.array 2-D, feature matrix
+        y: np.array 1-D, labels
+        splited_data: tuple (X_train, X_test, y_train, y_test) if provided, otherwise the data will be split inside the function
+        stored_str: string representation of the temp_list_to_database to be parsed
+    
+    Returns:
+        Final model predictions on the test set (y_pred) and test labels (y_test)
+
+
+    example:
+    # 生成随机训练和测试数据
+    n_samples_train = 100  # 训练样本数
+    n_samples_test = 30   # 测试样本数
+    n_features = 500      # 特征数
+
+    # 生成随机光谱数据
+    X_train = np.random.rand(n_samples_train, n_features) 
+    X_test = np.random.rand(n_samples_test, n_features)
+
+    # 生成随机目标值(酒精浓度)
+    y_train = np.random.uniform(0, 100, n_samples_train)  # 0-100范围内的随机值
+    y_test = np.random.uniform(0, 100, n_samples_test)
+
+    # 构建splited_data元组
+    splited_data = (X_train, X_test, y_train, y_test)
+
+
+    # results = run_optuna_v5()
+    # params_dict = results['best_selection_steps']
+    params_dict = {
+            "outlier": [
+                "不做异常值去除",
+                {}
+            ],
+            "preprocess": [
+                [
+                    "rnv",
+                    "d2",
+                    "snv"
+                ],
+                [
+                    {
+                        "percent": 28
+                    },
+                    {},
+                    {}
+                ]
+            ],
+            "feature_selection": [
+                "不做特征选择",
+                {}
+            ],
+            "dimensionality_reduction": [
+                "不做降维",
+                {}
+            ],
+            "model": [
+                "RFR(随机森林回归)",
+                {
+                    "n_estimators": 5,
+                    "criterion": "friedman_mse",
+                    "min_samples_split": 0.30284442935543743,
+                    "min_samples_leaf": 38,
+                    "min_weight_fraction_leaf": 0.02589404748849362,
+                    "max_features": 0.4548695437636622,
+                    "random_state": 98
+                }
+            ]
+        }
+
+    y_test, y_pred = rebuild_model_v2(splited_data=splited_data, params_dict=params_dict)
+    """
+
+    functions_ = {
+            'Pretreatment': {
+                '不做异常值去除': [AF.return_inputs, {}],
+                'mahalanobis':
+                    [AF.mahalanobis, ],
+            },
+            'Dataset_Splitting': {
+                'random_split': [AF.random_split],
+                'custom_train_test_split':[AF.custom_train_test_split ],
+                            },
+            'Preprocess': {
+                '不做预处理': [AF.return_inputs, {}],
+                'mean_centering': [AF.mean_centering, {}],
+                'normalization': [AF.normalization,
+                                    {}],
+                'standardization': [AF.standardization,
+                                    {}],
+                'poly_detrend': [AF.poly_detrend,   {}],
+                'snv': [AF.snv, {}],
+                'savgol':[AF.savgol,{}],
+                'msc': [AF.msc, {}],
+                'd1':[AF.d1, {}],
+                'd2':[AF.d2, {}],
+                'rnv':[AF.rnv, {}],
+                'move_avg':[AF.move_avg, {}],
+                'baseline_iarpls':[AF.baseline_iarpls, {}],
+                'baseline_airpls':[AF.baseline_airpls, {}],
+                'baseline_derpsalsa':[AF.baseline_derpsalsa, {}],
+
+            },
+            "Feature_Selection": {
+                '不做特征选择': [AF.return_inputs, {}],
+                'cars': [AF.cars, {}],
+                'spa': [AF.spa, {}],
+                'corr_coefficient': [AF.corr_coefficient, {}],
+                'anova': [AF.anova, {}],
+                'fipls': [AF.fipls, {}]
+            },
+
+            'Dimensionality_reduction': {
+                '不做降维': [AF.return_inputs, {}],
+                'pca': [AF.pca, {}],
+                'remove_high_variance_and_normalize': [AF.remove_high_variance_and_normalize, {}],
+            },
+
+
+            'Model_Selection': {
+                'LR': [AF.LR, {}],
+                'SVR': [AF.SVR,
+                            {}],
+                'PLSR': [AF.PLSR, {}],
+                'Bayes(贝叶斯回归)': [AF.bayes, {}],
+                'RFR(随机森林回归)': [AF.RFR, {}],
+                'BayesianRidge': [AF.BayesianRidge, {}],
+                
+                'LogisticRegression':[AF.logr,{}],
+                'SVM': [AF.SVM, {}],
+                'DT': [AF.DT, {}],
+                'RandomForest': [AF.RandomForest, {}],
+                'KNN': [AF.KNN, {}],
+                'Bayes(贝叶斯分类)': [
+                    AF.CustomNaiveBayes, {}],
+                'GradientBoostingTree': [AF.GradientBoostingTree, {}],
+                'XGBoost': [AF.XGBoost, {}],
+
+                # 模型选择的函数和参数
+            },
+        }
+    
+    # Parse the stored_str back into the original dictionary format
+    selection_steps = params_dict
+    
+    # Extract the steps from the selection_steps dictionary
+    # outlier_removal = selection_steps['outlier']
+    preprocess_list = selection_steps['preprocess'] 
+    feat_selection = selection_steps['feature_selection']
+    dim_reduction = selection_steps['dimensionality_reduction']
+    model_selection = selection_steps['model']
+    print(preprocess_list)
+
+
+    # Apply the dataset splitting
+
+    X_train, X_test, y_train, y_test = splited_data
+
+    # Apply preprocessing steps
+    for func_info, func_params in zip(preprocess_list[0], preprocess_list[1]):
+        print(func_info,func_params)
+        X_train, X_test, y_train, y_test = functions_["Preprocess"][func_info][0](X_train, X_test, y_train, y_test, **func_params)
+
+    # Apply feature selection
+    X_train, X_test, y_train, y_test = functions_["Feature_Selection"][feat_selection[0]][0](X_train, X_test, y_train, y_test, **feat_selection[1])
+
+    # Apply dimensionality reduction
+    X_train, X_test, y_train, y_test = functions_["Dimensionality_reduction"][dim_reduction[0]][0](X_train, X_test, y_train, y_test, **dim_reduction[1])
+
+    # Apply the model selection and fit the model
+    y_train, y_test, y_train_pred, y_pred = functions_["Model_Selection"][model_selection[0]][0](
+        X_train, X_test, y_train, y_test, **model_selection[1]
+    )
+
+    return y_test, y_pred
+
 
 def rebuild_model(X, y, splited_data=None, stored_str=None):
 

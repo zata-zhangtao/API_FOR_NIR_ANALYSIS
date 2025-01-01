@@ -192,7 +192,7 @@ def clarke_error_grid(reference, prediction):
     return zone_counts
 
 
-def plotly_simple_chart(data, x_axis=None, x_tick_interval=100, x_title="Time", y_title="Intensity", title="Data Over Time", template="plotly_white", tick_angle=90):
+def plotly_simple_chart(data, x_axis=None, x_tick_interval=100, x_title="", y_title="Intensity", title="", template="plotly_white", tick_angle=90):
     
     """
     绘制数据图表，支持可选参数调整。
@@ -237,6 +237,7 @@ def plotly_simple_chart(data, x_axis=None, x_tick_interval=100, x_title="Time", 
     )
 
     fig.show()
+    return fig
 
 def analyze_model_performance(y_train, y_train_pred, y_val, y_val_pred, y_test, y_test_pred):
     """

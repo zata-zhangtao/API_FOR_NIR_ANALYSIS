@@ -4,11 +4,40 @@ import datetime
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Union, Optional
-from nirapi.utils import run_optuna_v5
+from nirapi.utils import run_optuna_v5,rebuild_model_v2
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import os
-class CreateTrainReport:
+
+
+"""
+example:
+def test_data_analysis_report():
+    测试DataAnalysisReport类的功能
+    # 创建测试数据
+    test_data = {
+        '2024-01-01': (np.random.rand(10, 5), np.random.rand(10)),
+        '2024-01-02': (np.random.rand(10, 5), np.random.rand(10)),
+        '2024-01-03': (np.random.rand(10, 5), np.random.rand(10))
+    }
     
+    # 测试报告生成
+    report = Create_train_task('test_report.pdf')
+    try:
+        if os.path.exists('test_report.pdf'):
+            os.remove('test_report.pdf')
+        score_df = report.analyze_data(test_data, train_date='2024-01-01')
+        report.add_summary_page("测试总结"+str(score_df.to_dict()))
+        report.close()
+        print("测试通过: 报告生成成功")
+    except Exception as e:
+        print(f"测试失败: {str(e)}")
+
+test_data_analysis_report()
+"""
+
+
+class CreateTrainReport:
+
     def __init__(self, output_pdf_path: str):
         """
         初始化分析报告类
@@ -20,9 +49,11 @@ class CreateTrainReport:
         
     def analyze_data(self, 
                     data_dict: Dict, 
-                    train_date: str = '2024-11-14',
+                    train_data: str = 'train',
+                    test_data: str = 'test',
                     exclude_date: Optional[Union[str, List[str]]] = None,
-                    n_trials: int = 5) -> pd.DataFrame:
+                    n_trials: int = 100,
+                    **kw) -> pd.DataFrame:
         """
         分析数据并生成报告
         Args:
@@ -30,17 +61,22 @@ class CreateTrainReport:
             train_date: 用于训练的日期
             exclude_date: 需要排除的日期列表
             n_trials: optuna优化迭代次数
+            kw: isReg:True   selected_metric:  ['mae','mse','r2','r',"accuracy", "precision", "recall"]
         Returns:
             score_df: 包含预测结果的DataFrame
         """
         # 数据验证
         if not data_dict:
             raise ValueError("数据字典不能为空")
-        if train_date not in data_dict:
-            raise ValueError(f"训练日期 {train_date} 不在数据集中")
+        if train_data not in data_dict:
+            raise ValueError(f"训练日期 {train_data} 不在数据集中")
+            
             
         # 准备训练数据
         data_dict_train = data_dict.copy()
+        if test_data in data_dict:
+            data_dict_train.pop(test_data, None)
+            print(f"测试数据 {test_data} 已从数据集中移除")
         if exclude_date:
             if isinstance(exclude_date, str):
                 exclude_date = [exclude_date]
@@ -52,10 +88,10 @@ class CreateTrainReport:
         try:
             results = run_optuna_v5(
                 data_dict_train, 
-                train_key=train_date, 
-                isReg=True, 
+                train_key=train_data, 
+                isReg=kw.get('isReg',True), 
                 chose_n_trails=n_trials, 
-                selected_metric='r', 
+                selected_metric=kw.get('selected_metric','r'), 
                 save="./", 
                 save_name=f"temp_{now}"
             )
@@ -64,7 +100,19 @@ class CreateTrainReport:
 
         # 计算评分
         acc_score = {}
+        # # 先添加训练集的结果
+        # train_X, train_y = data_dict[train_data]
+        # train_y_pred = results['dataset_scores'][train_data]['y_pred']
+        # train_score = results['dataset_scores'][train_data]['score']
+        # acc_score[f"{train_data}(训练集)"] = [
+        #     train_score,
+        #     train_y_pred,
+        #     train_y
+        # ]
+        
+        # 添加其他数据集的结果
         for key, value in results['dataset_scores'].items():
+            # if key != train_data:  # 跳过训练集
             acc_score[key] = [
                 value['score'],
                 value['y_pred'],
@@ -77,6 +125,9 @@ class CreateTrainReport:
         # 生成图表
         self._plot_prediction_results(score_df)
         self._plot_score_bars(score_df)
+        self._plot_test_data_results(data_dict,train_data,test_data,results)
+        self.plot_rmse_distribution(data_dict["val"][1], acc_score['val'][1])
+        self.close()
         
         return score_df
     
@@ -100,6 +151,7 @@ class CreateTrainReport:
             text_y_positions.append(max(y_pred))
         
         # 按列名顺序绘制散点图和指标
+        textstr = ""
         for i, (col, color) in enumerate(zip(score_df.columns, colors)):
             y_true = score_df.loc['y_true', col]
             y_pred = score_df.loc['y_pred', col]
@@ -114,27 +166,17 @@ class CreateTrainReport:
             r2 = r2_score(y_true, y_pred)
             r = np.corrcoef(y_true, y_pred)[0,1]
             
-            # 在散点附近添加带框的指标文本
-            stats_text = (f'{col}\n'
-                         f'RMSE = {rmse:.3f}\n'
-                         f'MAE = {mae:.3f}\n'
-                         f'R2 = {r2:.3f}\n'
-                         f'r = {r:.3f}')
-            
-            # 根据数据集顺序设置文本位置
-            text_x = min(y_true)
-            text_y = max_val - (i * (max_val - min_val) * 0.1)  # 根据索引调整垂直位置
-            
-            plt.text(text_x, text_y,
-                    stats_text,
-                    bbox=dict(facecolor='white',
-                             edgecolor='black', 
-                             alpha=0.8,
-                             pad=1.0,
-                             boxstyle='round'))
+            # 累加指标文本
+            textstr += f'{col}:\nR2 = {r2:.5f}\nMAE = {mae:.5f}\nRMSE = {rmse:.5f}\n\n'
             
         # 添加对角线
         plt.plot([min_val, max_val], [min_val, max_val], 'k--', alpha=0.5)
+
+        # 在图表左上角添加所有指标文本
+        props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+        plt.text(0.05, 0.95, textstr.rstrip(), fontsize=10,
+                transform=plt.gca().transAxes,
+                verticalalignment='top', bbox=props)
 
         plt.xlabel('Measured Value')
         plt.ylabel('Predicted Value')
@@ -188,6 +230,93 @@ class CreateTrainReport:
         self.pdf.savefig(bbox_inches='tight')
         plt.close()
         
+    def _plot_test_data_results(self, data_dict: Dict, train_data: str, test_data: str, results: Dict) -> None:
+        """
+        绘制测试数据结果
+        Args:
+            score_df: 包含评分结果的DataFrame
+        """
+        splited_data = (data_dict[train_data][0],data_dict[test_data][0],data_dict[train_data][1],data_dict[test_data][1])
+        # 获取测试集结果
+        y_test, y_pred = rebuild_model_v2(splited_data=splited_data,params_dict=results['best_selection_steps'])
+        
+        # 获取训练集结果
+        train_data_split = (data_dict[train_data][0],data_dict[train_data][0],data_dict[train_data][1],data_dict[train_data][1])
+        y_train, y_train_pred = rebuild_model_v2(splited_data=train_data_split,params_dict=results['best_selection_steps'])
+
+        plt.figure(figsize=(12, 8))
+        # 绘制散点图
+        plt.scatter(y_train, y_train_pred, c='red', label='Train Data', alpha=0.5)
+        plt.scatter(y_test, y_pred, c='blue', label='Test Data')
+        
+        # 绘制对角线
+        min_val = min(min(y_train), min(y_test))
+        max_val = max(max(y_train), max(y_test))
+        plt.plot([min_val, max_val], [min_val, max_val], 'k--', alpha=0.5)
+        
+        # 计算评估指标
+        from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
+        r2_train = r2_score(y_train, y_train_pred)
+        r2_test = r2_score(y_test, y_pred)
+        mae_train = mean_absolute_error(y_train, y_train_pred)
+        mae_test = mean_absolute_error(y_test, y_pred)
+        rmse_train = np.sqrt(mean_squared_error(y_train, y_train_pred))
+        rmse_test = np.sqrt(mean_squared_error(y_test, y_pred))
+        
+        # 添加文本框显示评估指标
+        textstr = f'Train:\nR2 = {r2_train:.5f}\nMAE = {mae_train:.5f}\nRMSE = {rmse_train:.5f}\n\nTest:\nR2 = {r2_test:.5f}\nMAE = {mae_test:.5f}\nRMSE = {rmse_test:.5f}'
+        props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+        plt.text(0.05, 0.95, textstr, transform=plt.gca().transAxes, fontsize=10,
+                verticalalignment='top', bbox=props)
+        
+        plt.xlabel('Measured Value')
+        plt.ylabel('Predicted Value')
+        plt.title('Model Results')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        self.pdf.savefig(bbox_inches='tight')
+        plt.close()
+
+
+    def plot_rmse_distribution(self, y_true, y_pred, title='RMSE Distribution'):
+        """
+        绘制每个样本点的RMSE分布图
+        Args:
+            y_true: 真实值
+            y_pred: 预测值
+            title: 图表标题
+        """
+        # 计算每个点的RMSE
+        rmse_per_point = np.sqrt((y_true - y_pred) ** 2)
+        plt.figure(figsize=(12, 8))
+        
+        # 绘制RMSE分布散点图
+        plt.scatter(y_true, rmse_per_point, alpha=0.6)
+        
+        # 添加均值和标准差线
+        mean_rmse = np.mean(rmse_per_point)
+        std_rmse = np.std(rmse_per_point)
+        plt.axhline(y=mean_rmse, color='r', linestyle='--', label=f'Mean RMSE: {mean_rmse:.5f}')
+        plt.axhline(y=mean_rmse + std_rmse, color='g', linestyle=':', label=f'Mean + Std: {(mean_rmse + std_rmse):.5f}')
+        plt.axhline(y=mean_rmse - std_rmse, color='g', linestyle=':', label=f'Mean - Std: {(mean_rmse - std_rmse):.5f}')
+        # 找出RMSE最大的几个点
+        worst_indices = np.argsort(rmse_per_point)[-5:]
+        for idx in worst_indices:
+            plt.annotate(f'({y_true[idx]:.2f}, {rmse_per_point[idx]:.5f})',
+                        (y_true[idx], rmse_per_point[idx]),
+                        xytext=(10, 10), textcoords='offset points',
+                        bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.5),
+                        arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'))
+        
+        plt.xlabel('真实值')
+        plt.ylabel('RMSE')
+        plt.title(title)
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        self.pdf.savefig(bbox_inches='tight')
+        plt.close()
     def add_text_with_level(self, text: Union[str, Dict], level: int = 1) -> None:
         """
         添加带层级的文字内容到PDF
@@ -195,55 +324,59 @@ class CreateTrainReport:
             text: 要添加的文本内容,可以是字符串或字典
             level: 文字等级(1-5),影响字体大小和缩进
         """
-        # 根据level设置字体大小和缩进
-        font_sizes = {
-            1: 16,  # 一级标题
-            2: 14,  # 二级标题 
-            3: 12,  # 三级标题
-            4: 11,  # 四级标题
-            5: 10   # 五级标题
-        }
-        
-        indents = {
-            1: 0.1,  # 一级缩进
-            2: 0.15, # 二级缩进
-            3: 0.2,  # 三级缩进
-            4: 0.25, # 四级缩进
-            5: 0.3   # 五级缩进
-        }
-        
-        font_size = font_sizes.get(level, 10)  # 默认最小字号
-        indent = indents.get(level, 0.3)  # 默认最大缩进
-        
         plt.figure(figsize=(12, 8))
+        plt.clf()  # 清除当前图形
         
         # 将字典转换为格式化文本
         if isinstance(text, dict):
             formatted_text = []
             for key, value in text.items():
-                if isinstance(value, dict):
+                if isinstance(value, list):  # 处理列表类型的值
+                    formatted_text.append(f"{key}:")
+                    if len(value) >= 2:  # 确保value至少有两个元素
+                        formatted_text.append(f"  方法: {value[0]}")
+                        if isinstance(value[1], dict):  # 如果第二个元素是字典
+                            for param_key, param_value in value[1].items():
+                                formatted_text.append(f"    {param_key}: {param_value}")
+                elif isinstance(value, dict):
                     formatted_text.append(f"{key}:")
                     for sub_key, sub_value in value.items():
                         formatted_text.append(f"  {sub_key}: {sub_value}")
                 else:
                     formatted_text.append(f"{key}: {value}")
             text = "\n".join(formatted_text)
-            
-        # 分段处理文本
-        paragraphs = text.split('\n')
-        y_pos = 0.95  # 起始位置
         
-        for para in paragraphs:
-            if para.strip():  # 忽略空行
-                plt.text(indent, y_pos, para,
-                        fontsize=font_size,
-                        wrap=True,
-                        transform=plt.gca().transAxes)
-                y_pos -= 0.05  # 段落间距
+        # 设置字体大小
+        font_size = {1: 16, 2: 14, 3: 12, 4: 11, 5: 10}.get(level, 10)
+        
+        # 计算每行文本的高度
+        line_height = 0.05
+        lines = text.split('\n')
+        total_height = len(lines) * line_height
+        
+        # 确保所有文本都能显示在图中
+        y_start = 0.95
+        if total_height > 0.9:  # 如果文本太长
+            y_start = 0.95
+        
+        # 逐行添加文本
+        for i, line in enumerate(lines):
+            indent = 0.1
+            # 根据缩进级别调整
+            if line.startswith('    '):  # 三级缩进
+                indent = 0.3
+            elif line.startswith('  '):   # 二级缩进
+                indent = 0.2
+                
+            plt.text(indent, y_start - i * line_height, 
+                    line.lstrip(),  # 移除开头的空格
+                    fontsize=font_size,
+                    transform=plt.gca().transAxes)
         
         plt.axis('off')
-        self.pdf.savefig()
+        self.pdf.savefig(bbox_inches='tight')
         plt.close()
+
     def add_summary_page(self, summary_text: str) -> None:
         """
         添加总结页面到PDF

@@ -21,7 +21,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import cross_val_predict
 from scipy.signal import savgol_filter
-# from pybaselines.whittaker import iarpls, airpls, derpsalsa
+from pybaselines.whittaker import iarpls, airpls, derpsalsa
 # 不做任何处理
 def return_inputs(*args):
     return args
@@ -350,7 +350,41 @@ def d1(X_train, X_test, y_train, y_test):
 
     return X_train_d1, X_test_d1, y_train, y_test
 
+
 def d2(X_train, X_test, y_train, y_test):
+    """ Second derivative
+    :param X_train: raw spectrum training data, shape (n_train_samples, n_features)
+    :param X_test: raw spectrum testing data, shape (n_test_samples, n_features)
+    :param y_train: training labels
+    :param y_test: testing labels
+    :return: X_train_d2, X_test_d2, y_train, y_test
+    """
+    def calculate_second_derivative(data):
+        # 检查输入数据的特征数量
+        if isinstance(data, pd.DataFrame):
+            data = data.values
+        if data.shape[1] < 3:
+            raise ValueError("需要至少3个特征才能计算二阶导数")
+            
+        # 计算一阶导数
+        temp2 = (pd.DataFrame(data)).diff(axis=1)
+        temp3 = np.delete(temp2.values, 0, axis=1)
+        
+        # 计算二阶导数
+        temp4 = (pd.DataFrame(temp3)).diff(axis=1)
+        spec_D2 = np.delete(temp4.values, 0, axis=1)
+        
+        return spec_D2
+
+    # 检查输入数据维度
+    if X_train.shape[1] < 3 or X_test.shape[1] < 3:
+        raise ValueError("输入数据需要至少3个特征才能计算二阶导数")
+
+    X_train_d2 = calculate_second_derivative(X_train)
+    X_test_d2 = calculate_second_derivative(X_test)
+
+    return X_train_d2, X_test_d2, y_train, y_test
+def d2_old(X_train, X_test, y_train, y_test):
     """ Second derivative
     :param X_train: raw spectrum training data, shape (n_train_samples, n_features)
     :param X_test: raw spectrum testing data, shape (n_test_samples, n_features)
@@ -513,7 +547,7 @@ def remove_high_variance_and_normalize(X_train, X_test, y_train, y_test, remove_
 
 
 #随机选择
-def random_select(X_train, X_test, y_train, y_test,min_features=1, max_features=20, random_seed=42,mylog = None):
+def random_select(X_train, X_test, y_train, y_test,min_features=1, max_features=20, random_seed=42):
     """
     Randomly select a subset of features
 
@@ -528,19 +562,16 @@ def random_select(X_train, X_test, y_train, y_test,min_features=1, max_features=
     n = np.random.randint(min_features, max_features )
     num_columns = X_train.shape[1]
     # 随机选择 n 个不重复的列索引
+    np.random.seed(random_seed)
     selected_columns = np.random.choice(num_columns, n, replace=False)
 
     selected_columns = sorted(selected_columns)
-
-    selected_columns = np.array([49, 53, 81, 92, 105, 109, 132, 190, 201, 220, 258, 283, 319, 322, 376, 380, 396, 397])
-
 
 
 
     # 从 data_X 中选择这些列
     X_train = X_train[:, selected_columns]
     X_test = X_test[:, selected_columns]
-    mylog.info(selected_columns)
 
     return X_train, X_test, y_train, y_test
 
@@ -780,6 +811,8 @@ def anova(x,x_test,y,y_test, threshold):
     X_test = x_test[:, i_select]
     return X_train, X_test, y, y_test
 
+
+# TODO 这个函数有问题
 def fipls(x,x_test,y,y_test, n_intervals, interval_width, n_comp):
     from auswahl import FiPLS
     """
@@ -787,7 +820,8 @@ def fipls(x,x_test,y,y_test, n_intervals, interval_width, n_comp):
     """
     pls = PLSRegression(n_components=n_comp)
     selector = FiPLS(n_intervals_to_select=n_intervals, interval_width=interval_width, n_cv_folds=5)
-    select_intervals = selector.fit(x, y).get_support()
+    print(x.shape,y.reshape(-1,1).shape)
+    select_intervals = selector.fit(x, y.reshape(-1,1)).get_support()
     i_select = [i for i, value in enumerate(select_intervals) if value]
     X_train = x[:, i_select]
     X_test = x_test[:, i_select]

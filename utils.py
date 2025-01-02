@@ -2495,7 +2495,10 @@ def rebuild_model_v2(splited_data=None, params_dict:dict=None):
                 'spa': [AF.spa, {}],
                 'corr_coefficient': [AF.corr_coefficient, {}],
                 'anova': [AF.anova, {}],
-                'fipls': [AF.fipls, {}]
+                'fipls': [AF.fipls, {}],
+                'remove_high_variance_and_normalize':[AF.remove_high_variance_and_normalize,{}],
+                'random_select':[AF.random_select,{}]
+
             },
 
             'Dimensionality_reduction': {

@@ -86,6 +86,7 @@ class CreateTrainReport:
         # 运行模型训练和预测
         now = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
         try:
+        # if True:
             results = run_optuna_v5(
                 data_dict_train, 
                 train_key=train_data, 

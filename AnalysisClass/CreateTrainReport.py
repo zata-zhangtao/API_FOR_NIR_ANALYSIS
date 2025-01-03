@@ -4,7 +4,7 @@ import datetime
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Union, Optional
-from nirapi.utils import run_optuna_v5,rebuild_model_v2
+
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import os
 
@@ -37,6 +37,7 @@ test_data_analysis_report()
 
 
 class CreateTrainReport:
+    
 
     def __init__(self, output_pdf_path: str):
         """
@@ -46,7 +47,7 @@ class CreateTrainReport:
         """
         self.output_pdf_path = output_pdf_path
         self.pdf = PdfPages(output_pdf_path)
-        
+        from nirapi.utils import run_optuna_v5,rebuild_model_v2
     def analyze_data(self, 
                     data_dict: Dict, 
                     train_data: str = 'train',
@@ -87,6 +88,7 @@ class CreateTrainReport:
         now = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
         try:
         # if True:
+            from nirapi.utils import run_optuna_v5
             results = run_optuna_v5(
                 data_dict_train, 
                 train_key=train_data, 
@@ -239,6 +241,7 @@ class CreateTrainReport:
         """
         splited_data = (data_dict[train_data][0],data_dict[test_data][0],data_dict[train_data][1],data_dict[test_data][1])
         # 获取测试集结果
+        from nirapi.utils import rebuild_model_v2
         y_test, y_pred = rebuild_model_v2(splited_data=splited_data,params_dict=results['best_selection_steps'])
         
         # 获取训练集结果

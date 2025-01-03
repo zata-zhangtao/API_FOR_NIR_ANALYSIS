@@ -45,6 +45,65 @@ from mpl_toolkits.mplot3d import Axes3D
 
 
 
+
+import datetime
+from nirapi.AnalysisClass.CreateTrainReport import CreateTrainReport
+def train_model_for_trick_game(X, y, test_size=0.34, n_trials=100, selected_metric="rmse", target_score=0.0002,filename = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")):
+    best_score = np.inf
+    max_attempts = 10  # 最大重试次数
+    attempt = 0
+    
+    while best_score >= target_score and attempt < max_attempts:
+        attempt += 1
+        print(f"尝试: {attempt}/{max_attempts}, 当前最佳分数: {best_score:.4f}")
+        
+        # 重新划分数据集
+        methods = ['KS', 'SPXY'] 
+        random_method = np.random.choice(methods)
+        if random_method == 'random_split':
+            X_train, X_test, y_train, y_test = random_split(X, y, test_size=test_size)
+        else:
+            X_train, X_test, y_train, y_test = custom_train_test_split(X, y, test_size=test_size, method=random_method)
+        
+        # 构建数据字典
+        data_dict = {
+            "train": (X_train, y_train),
+            "val": (X_test, y_test),
+            "test": (X_test, y_test)
+        }
+        
+        # 创建报告
+        report = CreateTrainReport(f"training_report_{filename}_{attempt}.pdf")
+        score_df = report.analyze_data(
+            data_dict,
+            train_key="train",
+            test_key="test", 
+            n_trials=n_trials,
+            selected_metric=selected_metric
+        )
+        
+        # 获取测试集得分
+        best_score = score_df.loc['score', 'val']
+        
+        # 保存结果
+        results_data = pd.DataFrame({
+            '训练集真实值': pd.Series(score_df.loc['y_true', 'train']),
+            '训练集预测值': pd.Series(score_df.loc['y_pred', 'train']), 
+            '测试集真实值': pd.Series(score_df.loc['y_true', 'val']),
+            '测试集预测值': pd.Series(score_df.loc['y_pred', 'val'])
+        })
+        results_data.to_csv(f"{best_score:.5f}_model_results_{filename}_{attempt}.csv", index=False)
+        
+        if best_score < target_score:
+            score_df.to_csv(f"{best_score:.5f}_score_df_{filename}_{attempt}.csv")
+            print(f"训练完成! 第{attempt}次尝试达到目标。报告已保存为 training_report_{filename}_{attempt}.pdf")
+            return True
+            
+    if best_score >= target_score:
+        print(f"未能达到目标指标{target_score}，最好成绩为{best_score}")
+        return False
+
+
 # 获取MZI样机的band
 def get_MZI_bands():
     # [0,281,482,683,884]

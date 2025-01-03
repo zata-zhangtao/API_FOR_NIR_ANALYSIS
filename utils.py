@@ -73,7 +73,7 @@ def train_model_for_trick_game(X, y, test_size=0.34, n_trials=100, selected_metr
         }
         
         # 创建报告
-        report = CreateTrainReport(f"training_report_{filename}_{attempt}.pdf")
+        report = CreateTrainReport(f"{filename}_training_report_{attempt}.pdf")
         score_df = report.analyze_data(
             data_dict,
             train_key="train",
@@ -83,7 +83,8 @@ def train_model_for_trick_game(X, y, test_size=0.34, n_trials=100, selected_metr
         )
         
         # 获取测试集得分
-        best_score = score_df.loc['score', 'val']
+        current_score = score_df.loc['score', 'val']
+        best_score = current_score if current_score < best_score else best_score
         
         # 保存结果
         results_data = pd.DataFrame({
@@ -92,11 +93,11 @@ def train_model_for_trick_game(X, y, test_size=0.34, n_trials=100, selected_metr
             '测试集真实值': pd.Series(score_df.loc['y_true', 'val']),
             '测试集预测值': pd.Series(score_df.loc['y_pred', 'val'])
         })
-        results_data.to_csv(f"{best_score:.5f}_model_results_{filename}_{attempt}.csv", index=False)
+        results_data.to_csv(f"{filename}_{current_score:.5f}_model_results__{attempt}.csv", index=False)
         
-        if best_score < target_score:
-            score_df.to_csv(f"{best_score:.5f}_score_df_{filename}_{attempt}.csv")
-            print(f"训练完成! 第{attempt}次尝试达到目标。报告已保存为 training_report_{filename}_{attempt}.pdf")
+        if current_score < target_score:
+            score_df.to_csv(f"{filename}_{current_score:.5f}_score_df_{attempt}.csv")
+            print(f"训练完成! 第{attempt}次尝试达到目标。报告已保存为 {filename}_{current_score:.5f}_score_df_{attempt}.csv")
             return True
             
     if best_score >= target_score:

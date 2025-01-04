@@ -3,7 +3,7 @@ loading data
 -------
 Functions:
 ---------
-    - create_connection_for_Guangyin_database( database:str,host:str=GUANGYIN_DATABASE_IP, port:int=53306, user:str='root', password:str='Guangyin88888888@',charset:str='utf8mb4'): 创建与Guangyin数据库的连接
+    - create_connection_for_Guangyin_database( database:str,host:str=GUANGYIN_DATABASE_IP, port:int=GUANGYIN_DATABASE_PORT, user:str='root', password:str='Guangyin88888888@',charset:str='utf8mb4'): 创建与Guangyin数据库的连接
     - insert_prototype_data_to_mysql(connection:object,   table_name:str,  PD样品:list, PD光源:Union[list,None], PD背景:Union[list,None], 重建样品:Union[list,None], 重建光源:Union[list,None], 重建样品扣背景:Union[list,None], 项目名称:str, 项目类型:str, 采集部位:Union[str,None], 采集日期:str, 志愿者:Union[str,None], 理化值:dict, 创建时间:Union[str,datetime.datetime],备注信息:Union[str,None]=None, 是否删除:Union[int,None]=None, 删除时间:Union[datetime.datetime,None]=None): 没有返回值
     - insert_spectrum_data_to_mysql(table_name:str,   光谱:list,  项目名称:str, 项目类型:str,  采集日期:str,理化值:dict,创建时间:str,光谱类型:str=None,采集部位:str=None, 志愿者:str=None,是否删除:int=None, 删除时间:str=None):没有返回值
     - get_data_from_mysql(sql): return data
@@ -29,7 +29,7 @@ Functions:
 ---------
 Examples:
 ---------
-    - 创建与Guangyin数据库的连接 create_connection_for_Guangyin_database( database:str,host:str=GUANGYIN_DATABASE_IP, port:int=53306, user:str='root', password:str='Guangyin88888888@',charset:str='utf8mb4')
+    - 创建与Guangyin数据库的连接 create_connection_for_Guangyin_database( database:str,host:str=GUANGYIN_DATABASE_IP, port:int=GUANGYIN_DATABASE_PORT, user:str='root', password:str='Guangyin88888888@',charset:str='utf8mb4')
     - 向mysql数据库中插入台式光谱仪光谱数据 insert_spectrum_data_to_mysql(table_name:str,   光谱:list,  项目名称:str, 项目类型:str,  采集日期:str,理化值:dict,创建时间:str,光谱类型:str=None,采集部位:str=None, 志愿者:str=None,是否删除:int=None, 删除时间:str=None)
     - 从mysql数据库中获取字典数据 get_data_from_mysql(sql)
     - 从光引mysql数据库中获取数据集 get_dataset_from_mysql(sql)
@@ -63,7 +63,15 @@ import pymysql
 import json
 
 # 定义数据库IP常量
-GUANGYIN_DATABASE_IP: str = '192.168.110.150'
+
+if True:
+## 局域网
+    GUANGYIN_DATABASE_IP: str = '192.168.110.150'
+    GUANGYIN_DATABASE_PORT: int = 53306
+else:
+## 公网IP
+    GUANGYIN_DATABASE_IP: str = '47.121.138.184'
+    GUANGYIN_DATABASE_PORT: int = 1001
 
 #############################################################################################################################################################################################
 ######################################################   数据库的相关操作
@@ -113,7 +121,7 @@ def load_alcohol_data_for_volunteer(volunteer, condition):
     return data_list[0], data_list[1], data_list[2]
 
 
-def create_connection_for_Guangyin_database(database:str,host:str=GUANGYIN_DATABASE_IP, port:int=53306, user:str='select_user1', password:str='select_user1',charset:str='utf8mb4',dict = False):
+def create_connection_for_Guangyin_database(database:str,host:str=GUANGYIN_DATABASE_IP, port:int=GUANGYIN_DATABASE_PORT, user:str='select_user1', password:str='select_user1',charset:str='utf8mb4',dict = False):
     """
     创建与Guangyin数据库的连接。
     -----
@@ -359,7 +367,7 @@ def insert_spectrum_data_to_mysql(table_name:str,光谱:list,项目名称:str,�
             raise ValueError("项目类型为人体时，采集部位不能为空")
     # try:
     # 建立数据库连接
-    connection = pymysql.connect(host=GUANGYIN_DATABASE_IP,port=53306, user='root', password='Guangyin88888888@', database='光谱数据库', charset='utf8mb4')
+    connection = pymysql.connect(host=GUANGYIN_DATABASE_IP,port=GUANGYIN_DATABASE_PORT, user='root', password='Guangyin88888888@', database='光谱数据库', charset='utf8mb4')
 
     
     
@@ -461,7 +469,7 @@ def get_data_from_mysql(sql,database='样机数据库'):
     print(data)
     data.to_csv("血糖数据.csv",index=False)
     '''
-    conn = pymysql.connect(host=GUANGYIN_DATABASE_IP,port=53306, user='select_user1', password='select_user1', database=database, charset='utf8mb4')
+    conn = pymysql.connect(host=GUANGYIN_DATABASE_IP,port=GUANGYIN_DATABASE_PORT, user='select_user1', password='select_user1', database=database, charset='utf8mb4')
     data = pd.read_sql(sql, conn)
     conn.close()
     return data
@@ -474,7 +482,7 @@ def update_data_to_mysql(file_path,database='样机数据库',table_name='样机
     '''
     data = pd.read_csv(file_path)
 
-    conn = pymysql.connect(host=GUANGYIN_DATABASE_IP,port=53306, user='root', password='Guangyin88888888@', database=database, charset='utf8mb4')
+    conn = pymysql.connect(host=GUANGYIN_DATABASE_IP,port=GUANGYIN_DATABASE_PORT, user='root', password='Guangyin88888888@', database=database, charset='utf8mb4')
     cursor = conn.cursor()
     for i in tqdm(range(len(data))):
         # 获取data中除id外的所有列名
@@ -524,7 +532,7 @@ def add_XlsxData_to_GuangyinDatabase_v4(file_path:str,table:str,database:str='�
     # 建立数据库连接
     connection = pymysql.connect(
         host=GUANGYIN_DATABASE_IP,
-        port=53306,
+        port=GUANGYIN_DATABASE_PORT,
         user='root',
         password='Guangyin88888888@',
         database=database,
@@ -665,7 +673,7 @@ def add_XlsxData_to_GuangyinDatabase(file_path,table,database='样机数据库',
     # 建立数据库连接
     connection = pymysql.connect(
         host=GUANGYIN_DATABASE_IP,
-        port=53306,
+        port=GUANGYIN_DATABASE_PORT,
         user='root',
         password='Guangyin88888888@',
         database=database,
@@ -790,7 +798,7 @@ def add_alcoholXlsxData_to_GuangyinDatabase(file_path,table,database='样机数�
     # 建立数据库连接
     connection = pymysql.connect(
         host=GUANGYIN_DATABASE_IP,
-        port=53306,
+        port=GUANGYIN_DATABASE_PORT,
         user='root',
         password='Guangyin88888888@',
         database=database,

@@ -94,7 +94,7 @@ class CreateTrainReport:
                 train_key=train_data, 
                 isReg=kw.get('isReg',True), 
                 chose_n_trails=n_trials, 
-                selected_metric=kw.get('selected_metric','r'), 
+                selected_metric=kw.get('selected_metric','r2'), 
                 save="./", 
                 save_name=f"temp_{now}"
             )
@@ -129,7 +129,6 @@ class CreateTrainReport:
         self._plot_prediction_results(score_df)
         self._plot_score_bars(score_df)
         self._plot_test_data_results(data_dict,train_data,test_data,results)
-        self.plot_rmse_distribution(data_dict["val"][1], acc_score['val'][1])
         self.close()
         
         return score_df
@@ -281,6 +280,9 @@ class CreateTrainReport:
         plt.tight_layout()
         self.pdf.savefig(bbox_inches='tight')
         plt.close()
+        
+        # 绘制RMSE分布图
+        self.plot_rmse_distribution(y_test, y_pred, title='RMSE Distribution')
 
 
     def plot_rmse_distribution(self, y_true, y_pred, title='RMSE Distribution'):
@@ -307,12 +309,11 @@ class CreateTrainReport:
         # 找出RMSE最大的几个点
         worst_indices = np.argsort(rmse_per_point)[-5:]
         for idx in worst_indices:
-            plt.annotate(f'({y_true[idx]:.2f}, {rmse_per_point[idx]:.5f})',
+            plt.annotate(f'idx={idx}\n({y_true[idx]:.2f}, {rmse_per_point[idx]:.5f})',
                         (y_true[idx], rmse_per_point[idx]),
                         xytext=(10, 10), textcoords='offset points',
                         bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.5),
                         arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'))
-        
         plt.xlabel('真实值')
         plt.ylabel('RMSE')
         plt.title(title)
@@ -342,6 +343,8 @@ class CreateTrainReport:
                         if isinstance(value[1], dict):  # 如果第二个元素是字典
                             for param_key, param_value in value[1].items():
                                 formatted_text.append(f"    {param_key}: {param_value}")
+                        elif isinstance(value[1], list):
+                            formatted_text.append(f"    {value[1]}")
                 elif isinstance(value, dict):
                     formatted_text.append(f"{key}:")
                     for sub_key, sub_value in value.items():

@@ -1859,7 +1859,7 @@ def run_optuna_v4(X,y,isReg,chose_n_trails,selected_metric = 'r', splited_data=N
         # 返回交叉验证的平均分数
         return np.mean(cv_scores)
 
-def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='r', save=None, save_name="", **kw):
+def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='rmse', save=None, save_name="", **kw):
     # 2024-12-23 V5版本
     # 2024-12-23修改了返回score的问题，返回的是除了训练集的score均值
     # 光谱数据的自动调参函数，可以自动调整选用建模过程中的哪些方法，参数。
@@ -2080,7 +2080,7 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
     selected_outlier = ["不做异常值去除", "mahalanobis"]
     selected_preprocess = ["不做预处理", "mean_centering", "normalization", "standardization", 
                          "poly_detrend", "snv", "savgol", "msc","d1", "d2", "rnv", "move_avg"]
-    preprocess_number_input = 1
+    preprocess_number_input = kw.get("preprocess_number_input",1)
     selected_feat_sec = ["不做特征选择","corr_coefficient","anova","remove_high_variance_and_normalize","random_select"]
     selected_dim_red = ["不做降维","pca"]
 

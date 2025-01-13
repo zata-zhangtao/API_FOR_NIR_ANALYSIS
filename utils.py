@@ -48,7 +48,119 @@ from mpl_toolkits.mplot3d import Axes3D
 
 import datetime
 from nirapi.AnalysisClass.CreateTrainReport import CreateTrainReport
-def train_model_for_trick_game(X, y, test_size=0.34, n_trials=100, selected_metric="rmse", target_score=0.0002,filename = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")):
+
+
+def train_model_for_trick_game_v2(splited_data=None, X=None, y=None, test_size=0.34,  n_trials=100, selected_metric="rmse", target_score=0.0002,filename = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),**kw):
+    
+    """
+    -----
+    Parameters:
+    -----
+        - splited_data : tuple(X_train,X_test,y_train,y_test)
+            if splited_data is not None, then X and y will be ignored
+        - X : ndarray
+            if splited_data is None, then X and y will be used to split data
+        - y : ndarray
+            if splited_data is None, then X and y will be used to split data
+        - test_size : float
+            if splited_data is None, then X and y will be used to split data
+        - n_trials : int
+            per trial number
+        - selected_metric : str ["r2","r","rmse","mae","mse","accuracy", "precision", "recall"]
+            test metric
+        - target_score : float
+            if the score is less than target_score, then the training will be stopped
+        - filename : str
+            the filename of the report
+        - kw : dict
+            the keyword arguments
+            - selected_outlier : list ["不做异常值去除", "mahalanobis"]
+            - selected_preprocess : list ["不做预处理", "mean_centering", "normalization", "standardization", 
+                         "poly_detrend", "snv", "savgol", "msc","d1", "d2", "rnv", "move_avg"]
+            - preprocess_number_input : int
+            - selected_feat_sec : list ["不做特征选择","corr_coefficient","anova","remove_high_variance_and_normalize","random_select"]
+            - selected_dim_red : list ["不做降维","pca"]    
+            - selected_model : list ["LR", "SVR", "PLSR", "Bayes(贝叶斯回归)", "RFR(随机森林回归)", "BayesianRidge"] or ["LogisticRegression", "SVM", "DT", "RandomForest", "KNN", 
+                        'Bayes(贝叶斯分类)', "GradientBoostingTree", "XGBoost"]
+    -----
+    Returns:
+    -----
+        - None
+    """
+
+    
+    
+    best_score = np.inf
+    max_attempts = 10  # 最大重试次数
+    attempt = 0
+    
+    while best_score >= target_score and attempt < max_attempts:
+        attempt += 1
+        print(f"尝试: {attempt}/{max_attempts}, 当前最佳分数: {best_score:.4f}")
+        
+        if splited_data is None:    
+            # 重新划分数据集
+            methods = ['KS', 'SPXY'] 
+            random_method = np.random.choice(methods)
+            if random_method == 'random_split':
+                X_train, X_test, y_train, y_test = random_split(X, y, test_size=test_size)
+            else:
+                X_train, X_test, y_train, y_test = custom_train_test_split(X, y, test_size=test_size, method=random_method)
+        else:
+            X_train, X_test, y_train, y_test = splited_data
+
+        
+
+
+        # 构建数据字典
+        data_dict = {
+            "train": (X_train, y_train),
+            "val": (X_test, y_test),
+            "test": (X_test, y_test)
+        }
+        print(data_dict.keys())
+        print(kw)
+        
+        # 创建报告
+        report = CreateTrainReport(f"{filename}_training_report_{attempt}.pdf")
+        score_df = report.analyze_data(
+            data_dict,
+            train_key="train",
+            test_key="test", 
+            n_trials=n_trials,
+            selected_metric=selected_metric,
+            **kw
+        )
+        
+        # 获取测试集得分
+        current_score = score_df.loc['score', 'val']
+        best_score = current_score if current_score < best_score else best_score
+        
+        # 保存结果
+        results_data = pd.DataFrame({
+            '训练集真实值': pd.Series(score_df.loc['y_true', 'train']),
+            '训练集预测值': pd.Series(score_df.loc['y_pred', 'train']), 
+            '测试集真实值': pd.Series(score_df.loc['y_true', 'val']),
+            '测试集预测值': pd.Series(score_df.loc['y_pred', 'val'])
+        })
+        results_data.to_csv(f"{filename}_{current_score:.5f}_model_results__{attempt}.csv", index=False)
+        
+        if current_score < target_score:
+            score_df.to_csv(f"{filename}_{current_score:.5f}_score_df_{attempt}.csv")
+            print(f"训练完成! 第{attempt}次尝试达到目标。报告已保存为 {filename}_{current_score:.5f}_score_df_{attempt}.csv")
+            return True
+            
+    if best_score >= target_score:
+        print(f"未能达到目标指标{target_score}，最好成绩为{best_score}")
+        return False
+
+
+
+
+
+
+
+def train_model_for_trick_game( X, y, test_size=0.34,  n_trials=100, selected_metric="rmse", target_score=0.0002,filename = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")):
     best_score = np.inf
     max_attempts = 10  # 最大重试次数
     attempt = 0
@@ -2205,6 +2317,13 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
                                                 'tol': trial.suggest_float("BR_tol", 1e-6, 1e-1, log=True),
                                                 'fit_intercept': trial.suggest_categorical("BR_fit_intercept", [True, False]),
                                             }],
+                'LactateNet': [AF.LactateNet, {
+                    # 'epochs': trial.suggest_int('LactateNet_epochs', 1, 3000),
+                    # 'batch_size': trial.suggest_int('LactateNet_batch_size', 1, 100),
+                    'learning_rate': trial.suggest_float('LactateNet_learning_rate', 0.001, 1.0),
+                    'weight_decay': trial.suggest_float('LactateNet_weight_decay', 0.001, 1.0),
+                    'patience': trial.suggest_int('LactateNet_patience', 1, 100),
+                }],
 
 
                 'LogisticRegression':[AF.logr,{}],
@@ -2576,6 +2695,7 @@ def rebuild_model_v2(splited_data=None, params_dict:dict=None):
                 'Bayes(贝叶斯回归)': [AF.bayes, {}],
                 'RFR(随机森林回归)': [AF.RFR, {}],
                 'BayesianRidge': [AF.BayesianRidge, {}],
+                'LactateNet': [AF.LactateNet, {}],
                 
                 'LogisticRegression':[AF.logr,{}],
                 'SVM': [AF.SVM, {}],
@@ -2586,6 +2706,7 @@ def rebuild_model_v2(splited_data=None, params_dict:dict=None):
                     AF.CustomNaiveBayes, {}],
                 'GradientBoostingTree': [AF.GradientBoostingTree, {}],
                 'XGBoost': [AF.XGBoost, {}],
+
 
                 # 模型选择的函数和参数
             },

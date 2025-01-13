@@ -499,7 +499,8 @@ def update_data_to_mysql(file_path,database='样机数据库',table_name='样机
 
 
 # V4版本 2024-12-18 修改了数据插入的逻辑，可以使用selected_data_datetime来选择插入的数据，可以插入多条数据
-def add_XlsxData_to_GuangyinDatabase_v4(file_path:str,table:str,database:str='样机数据库',project:str= '2024人体酒精数据_样机芯片2', y_type:list=['实测值','序号','是否饮酒','皮肤水分'],selected_data_datetime:str=None):
+def add_XlsxData_to_GuangyinDatabase_v4(file_path:str,table:str,database:str='样机数据库',project:str= '2024人体酒精数据_样机芯片2', y_type:list=['实测值','序号','是否饮酒','皮肤水分'],selected_data_datetime:str=None,volunteer_insert:str=None):
+    # 2025-01-09 修改了志愿者姓名，如果文件里没有志愿者姓名，则使用volunteer_insert
     # V4版本 2024-12-18 修改了数据插入的逻辑，可以使用selected_data_datetime来选择插入的数据，可以插入多条数据
     # V3版本，2024-12-13 修改为add_XlsxData_to_GuangyinDatabase
     # V2版本 2024-10-31 修改了v1版本存理化值的方式，不兼容，因此V1版本被删除，该版本重命名为add_alcoholXlsxData_to_GuangyinDatabase
@@ -541,6 +542,8 @@ def add_XlsxData_to_GuangyinDatabase_v4(file_path:str,table:str,database:str='�
     )
     
     PD_Sample, PD_Source, PD_BG, Recon_Sample, Recon_Source, Corrected_spectrum, Biomark, Measured_Value, y, date_time, volunteer = data
+    if volunteer is None:
+        volunteer = np.array([volunteer_insert]*len(PD_Sample))
     print("数据维度：",   PD_Sample.shape,PD_Source.shape,PD_BG.shape,Recon_Sample.shape,Recon_Source.shape,Corrected_spectrum.shape,Biomark.shape,Measured_Value.shape,y.shape,date_time.shape,volunteer.shape)
     
     if selected_data_datetime is not None:

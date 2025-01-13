@@ -29,6 +29,7 @@ import os
 matplotlib.use('Agg')
 import scipy
 import sys
+import random
 
 # 设置matplotlib中文字体
 
@@ -159,6 +160,7 @@ class SpectralAnalysisReport:
 
     def add_table(self, data, colWidths=None):
         """添加表格"""
+            
         # 设置表格样式
         style = [
             ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
@@ -175,7 +177,31 @@ class SpectralAnalysisReport:
         
         if not colWidths:
             colWidths = [self.doc.width/len(data[0])] * len(data[0])
-        table = Table(data, colWidths=colWidths, style=style)
+            
+        if len(data) > 25:
+            # 保留表头并随机选择25行数据
+            header = data[0]
+            body = data[1:]
+            selected_rows = random.sample(body, min(24, len(body)))
+            
+            # 如果第一列是数字，按第一列排序
+            try:
+                # 尝试将第一列转换为数字
+                first_col_nums = [float(row[0]) for row in selected_rows]
+                # 按第一列数值排序
+                sorted_indices = np.argsort(first_col_nums)
+                selected_rows = [selected_rows[i] for i in sorted_indices]
+            except (ValueError, TypeError):
+                # 如果转换失败，说明不是数字，保持随机顺序
+                pass
+                
+            truncated_data = [header] + selected_rows
+            # 添加提示信息行
+            info_row = [f"(显示25条随机数据,共{len(data)}条)" for _ in range(len(data[0]))]
+            truncated_data.append(info_row)
+            table = Table(truncated_data, colWidths=colWidths, style=style)
+        else:
+            table = Table(data, colWidths=colWidths, style=style)
         
         self.pdf_elements.append(table)
         self.pdf_elements.append(Spacer(1, 12))
@@ -236,7 +262,7 @@ class SpectralAnalysisReport:
         img.drawHeight = img_height * scale
         
         return img
-# ... existing code ...
+
 
     def analyze_and_generate_report(self):
         try:
@@ -249,6 +275,9 @@ class SpectralAnalysisReport:
 
             self.add_heading("光谱数据", 2)
             self._plot_all_spectra()
+
+            self.add_heading("噪声水平", 2)
+            self._analyze_noise_levels()
 
             self.add_heading("数据关系分析", 2)
             self._plot_data_relationships()
@@ -1602,10 +1631,10 @@ class SpectralAnalysisReport:
             plt.xticks(rotation=45)
             plt.grid(True)
             plt.tight_layout()
-            
-            # 将图形添加到PDF文档
             self.pdf_elements.append(self.figure_to_image(fig))
             plt.close(fig)
+
+
             # 绘制按顺序的实测值变化图
             fig = plt.figure(figsize=(15, 6))
             plt.plot(measured_data['measured_value'], 'b-')
@@ -1618,10 +1647,70 @@ class SpectralAnalysisReport:
             plt.title('实测值按采集顺序变化')
             plt.grid(True)
             plt.tight_layout()
-            
-            # 将图形添加到PDF文档
             self.pdf_elements.append(self.figure_to_image(fig))
             plt.close(fig)
+
+
+
+            # 绘制实测值与光谱强度的顺序变化图（分别归一化后画在一起）
+            fig = plt.figure(figsize=(15, 6))
+            # 归一化实测值
+            normalized_measured = (measured_data['measured_value'] - measured_data['measured_value'].min()) / (measured_data['measured_value'].max() - measured_data['measured_value'].min())
+            # 归一化光谱强度
+            mean_intensity = np.mean(self.dataset['光谱'], axis=1)
+            normalized_intensity = (mean_intensity - mean_intensity.min()) / (mean_intensity.max() - mean_intensity.min())
+            # 绘制两条线
+            plt.plot(normalized_measured, 'b-', label='归一化实测值')
+            plt.plot(normalized_intensity, 'r-', label='归一化光谱强度')
+            plt.xlabel('样本序号')
+            plt.ylabel('归一化值')
+            plt.title('实测值与光谱强度的归一化对比')
+            plt.legend()
+            plt.grid(True)
+            plt.tight_layout()
+            self.pdf_elements.append(self.figure_to_image(fig))
+            plt.close(fig)
+
+
+            # 按日期分组绘制光谱图
+            unique_dates = pd.to_datetime(measured_data['date']).dt.date.unique()
+            for date in unique_dates:
+                # 获取当天的数据
+                date_mask = pd.to_datetime(measured_data['date']).dt.date == date
+                date_measured = measured_data[date_mask]
+                
+                # 绘制当天的实测值变化图
+                fig = plt.figure(figsize=(15, 6))
+                plt.plot(range(len(date_measured)), date_measured['measured_value'], 
+                        'o-', alpha=0.5, markersize=5)
+                plt.xlabel('样本序号')
+                plt.ylabel('实测值')
+                plt.title(f'{date} 实测值变化')
+                plt.grid(True)
+                plt.tight_layout()
+                self.pdf_elements.append(self.figure_to_image(fig))
+                plt.close(fig)
+                
+                # 绘制当天的光谱强度与实测值对比图
+                fig = plt.figure(figsize=(15, 6))
+                # 归一化当天的实测值
+                norm_measured = (date_measured['measured_value'] - date_measured['measured_value'].min()) / \
+                            (date_measured['measured_value'].max() - date_measured['measured_value'].min())
+                # 归一化当天的光谱强度
+                day_intensity = np.mean(self.dataset['光谱'][date_mask], axis=1)
+                norm_intensity = (day_intensity - day_intensity.min()) / \
+                            (day_intensity.max() - day_intensity.min())
+                
+                plt.plot(norm_measured, 'b-', label='归一化实测值')
+                plt.plot(norm_intensity, 'r-', label='归一化光谱强度')
+                plt.xlabel('样本序号')
+                plt.ylabel('归一化值')
+                plt.title(f'{date} 实测值与光谱强度对比')
+                plt.legend()
+                plt.grid(True)
+                plt.tight_layout()
+                self.pdf_elements.append(self.figure_to_image(fig))
+                plt.close(fig)
 
 
         
@@ -1658,6 +1747,51 @@ class SpectralAnalysisReport:
         plt.close(fig)
         
         return volunteer_stats
+    
+    def _analyze_noise_levels(self):
+        """分析光谱噪声水平"""
+        if '光谱' not in self.dataset:
+            raise ValueError("数据集中缺少'光谱'数据")
+            
+        # 将光谱数据按照每3个一组进行分组
+        n_groups = len(self.spectral_data) // 3
+        if n_groups == 0:
+            self.add_paragraph("警告:样本数量少于3个,无法进行噪声分析")
+            return
+            
+        X_grouped = np.array(self.spectral_data[:3*n_groups]).reshape(n_groups, 3, -1)
+
+        # 计算每组在每个波长点上的标准差
+        noise_levels = np.std(X_grouped, axis=1)  # 形状为 (n_groups, n_features)
+
+        # 计算所有组的平均噪声水平
+        mean_noise_levels = np.mean(noise_levels, axis=0)  # 形状为 (n_features,)
+
+        # 绘制噪声水平图
+        fig = plt.figure(figsize=(15, 6))
+        plt.plot(mean_noise_levels, 'b-', label='平均噪声水平')
+        plt.xlabel('波长点')
+        plt.ylabel('噪声水平 (标准差)')
+        plt.title('每个波长点的平均噪声水平')
+        plt.grid(True)
+        plt.legend()
+        plt.tight_layout()
+        
+        # 将图形添加到PDF文档
+        self.pdf_elements.append(self.figure_to_image(fig))
+        plt.close(fig)
+        
+        # 添加统计信息
+        self.add_paragraph("噪声水平分析结果：")
+        self.add_paragraph(f"平均噪声水平: {np.mean(mean_noise_levels):.4f}")
+        self.add_paragraph(f"最大噪声水平: {np.max(mean_noise_levels):.4f}")
+        self.add_paragraph(f"最小噪声水平: {np.min(mean_noise_levels):.4f}")
+        
+        # 找出噪声最大的波长点
+        max_noise_idx = np.argmax(mean_noise_levels)
+        self.add_paragraph(f"噪声最大的波长点索引: {max_noise_idx}")
+        
+        return mean_noise_levels
 
 def generate_analysis_report(dataset, output_path='data_analysis_report.pdf'):
     """

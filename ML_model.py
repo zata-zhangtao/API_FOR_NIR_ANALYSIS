@@ -1106,6 +1106,216 @@ def XGBoost(X_train, X_test, y_train, y_test, n_estimators=100, learning_rate=0.
 
 
 
+def LactateNet(X_train, X_test, y_train, y_test,  epochs=3000, batch_size=8, learning_rate=0.001, weight_decay=0.01, patience=100):
+    """
+    训练并评估 LactateNet 模型
+    -----
+    params:
+    -----
+    - X_train: 训练集特征
+    - X_test: 测试集特征
+    - y_train: 训练集标签
+    - y_test: 测试集标签
+    - input_size: 输入特征维度
+    - epochs: 训练轮数
+    - batch_size: 批量大小
+    - learning_rate: 学习率
+    - weight_decay: 权重衰减
+    - patience: 早停机制的耐心值
+    
+    -----
+    return:
+    -----
+    - train_r2: 训练集的R²分数
+    - test_r2: 测试集的R²分数
+    - train_rmse: 训练集的RMSE
+    - test_rmse: 测试集的RMSE
+
+    -----
+    example：
+        >>># 示例调用
+        >>># 生成示例数据
+        >>>np.random.seed(42)
+        >>>n_samples = 100
+        >>>n_features = 50
+        >>>X = np.random.randn(n_samples, n_features)
+        >>>y = np.random.randn(n_samples)
+
+        >>>from sklearn.model_selection import train_test_split
+        >>># 划分训练集和测试集
+        >>>X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        >>># 训练和评估模型
+        >>>train_r2, test_r2, train_rmse, test_rmse = train_and_evaluate_LactateNet(X_train, X_test, y_train, y_test, input_size=X_train.shape[1])
+    """
+    
+    # 定义数据集类
+    from torch.utils.data import Dataset, DataLoader
+    import torch.nn as nn
+    import torch
+    class CustomDataset(Dataset):
+        def __init__(self, X, y):
+            self.X = torch.FloatTensor(X)
+            self.y = torch.FloatTensor(y)
+            
+        def __len__(self):
+            return len(self.X)
+        
+        def __getitem__(self, idx):
+            return self.X[idx], self.y[idx]
+
+    # 定义神经网络模型
+    class LactateNet(nn.Module):
+        def __init__(self, input_size):
+            super(LactateNet, self).__init__()
+            self.feature_extractor = nn.Sequential(
+                nn.Linear(input_size, 512),
+                nn.BatchNorm1d(512),
+                nn.LeakyReLU(),
+                nn.Dropout(0.3),
+                
+                nn.Linear(512, 256),
+                nn.BatchNorm1d(256), 
+                nn.LeakyReLU(),
+                nn.Dropout(0.3),
+                
+                nn.Linear(256, 128),
+                nn.BatchNorm1d(128),
+                nn.LeakyReLU(),
+                nn.Dropout(0.2)
+            )
+            
+            self.regressor = nn.Sequential(
+                nn.Linear(128, 64),
+                nn.BatchNorm1d(64),
+                nn.LeakyReLU(),
+                nn.Linear(64, 32),
+                nn.BatchNorm1d(32),
+                nn.LeakyReLU(),
+                nn.Linear(32, 1)
+            )
+            
+        def forward(self, x):
+            features = self.feature_extractor(x)
+            output = self.regressor(features)
+            return output
+
+    # 准备数据
+    train_dataset = CustomDataset(X_train.astype(np.float32), y_train.astype(np.float32))
+    test_dataset = CustomDataset(X_test.astype(np.float32), y_test.astype(np.float32))
+    
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size)
+
+    # 初始化模型
+    model = LactateNet(input_size=X_train.shape[1])
+    criterion = nn.HuberLoss()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=20, verbose=True)
+
+    # 训练模型
+    train_losses = []
+    test_losses = []
+    best_loss = float('inf')
+    counter = 0
+
+    for epoch in range(epochs):
+        model.train()
+        epoch_loss = 0
+        for X_batch, y_batch in train_loader:
+            optimizer.zero_grad()
+            y_pred = model(X_batch)
+            loss = criterion(y_pred, y_batch.reshape(-1,1))
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+            epoch_loss += loss.item()
+        
+        train_losses.append(epoch_loss/len(train_loader))
+        
+        # 测试集评估
+        model.eval()
+        test_loss = 0
+        with torch.no_grad():
+            for X_batch, y_batch in test_loader:
+                y_pred = model(X_batch)
+                test_loss += criterion(y_pred, y_batch.reshape(-1,1)).item()
+        test_losses.append(test_loss/len(test_loader))
+        
+        # 学习率调整
+        scheduler.step(test_loss)
+        
+        # 早停机制
+        if test_loss < best_loss:
+            best_loss = test_loss
+            torch.save(model.state_dict(), 'best_model.pth')
+            counter = 0
+        else:
+            counter += 1
+            if counter >= patience:
+                print(f'Early stopping at epoch {epoch+1}')
+                break
+        
+        if (epoch + 1) % 100 == 0:
+            print(f'Epoch [{epoch+1}/{epochs}], Train Loss: {train_losses[-1]:.4f}, Test Loss: {test_losses[-1]:.4f}')
+
+    # 加载最佳模型
+    model.load_state_dict(torch.load('best_model.pth'))
+
+    # 绘制损失曲线
+    # plt.figure(figsize=(10, 6))
+    # plt.plot(train_losses, label='训练损失')
+    # plt.plot(test_losses, label='测试损失')
+    # plt.xlabel('迭代次数')
+    # plt.ylabel('损失')
+    # plt.title('训练和测试损失曲线')
+    # plt.legend()
+    # plt.show()
+
+    # 预测结果可视化
+    model.eval()
+    with torch.no_grad():
+        train_pred = model(torch.FloatTensor(X_train.astype(np.float32))).numpy().reshape(-1)
+        test_pred = model(torch.FloatTensor(X_test.astype(np.float32))).numpy().reshape(-1)
+
+    ## 计算评估指标
+    # train_r2 = r2_score(y_train, train_pred)
+    # test_r2 = r2_score(y_test, test_pred)
+    # train_rmse = np.sqrt(mean_squared_error(y_train, train_pred))
+    # test_rmse = np.sqrt(mean_squared_error(y_test, test_pred))
+
+    # plt.figure(figsize=(12, 5))
+    
+    # plt.subplot(1, 2, 1)
+    # plt.scatter(y_train, train_pred, c='blue', label=f'训练集 (R²={train_r2:.3f}, RMSE={train_rmse:.3f})')
+    # plt.plot([min(y_train), max(y_train)], [min(y_train), max(y_train)], 'r--')
+    # plt.xlabel('实际值')
+    # plt.ylabel('预测值')
+    # plt.title('训练集预测结果')
+    # plt.legend()
+
+    # plt.subplot(1, 2, 2)
+    # plt.scatter(y_test, test_pred, c='green', label=f'测试集 (R²={test_r2:.3f}, RMSE={test_rmse:.3f})')
+    # plt.plot([min(y_test), max(y_test)], [min(y_test), max(y_test)], 'r--')
+    # plt.xlabel('实际值')
+    # plt.ylabel('预测值')
+    # plt.title('测试集预测结果')
+    # plt.legend()
+
+    # # 绘制测试集的变化趋势
+    # plt.figure(figsize=(10, 6))
+    # plt.plot(y_test, 'b-', label='实际值')
+    # plt.plot(test_pred, 'r--', label='预测值')
+    # plt.xlabel('样本序号')
+    # plt.ylabel('目标值')
+    # plt.title('测试集目标值变化趋势')
+    # plt.legend()
+    
+    # plt.tight_layout()
+    # plt.show()
+    return y_train, y_test, train_pred, test_pred
+    # return train_r2, test_r2, train_rmse, test_rmse
+
 
 
 

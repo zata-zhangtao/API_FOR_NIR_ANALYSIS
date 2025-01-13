@@ -36,6 +36,149 @@ test_data_analysis_report()
 """
 
 
+
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
+from matplotlib.backends.backend_pdf import PdfPages
+
+class CreateReportbyData:
+    def __init__(self, output_pdf_path: str):
+        """
+        初始化分析报告类
+        Args:
+            output_pdf_path: PDF报告的输出路径
+        """
+        # 检查输出路径是否存在,如果不存在则创建
+        output_dir = os.path.dirname(output_pdf_path)
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        self.output_pdf_path = output_pdf_path
+        self.pdf = PdfPages(output_pdf_path)
+
+    def generate_report(self, 
+                       y_train: np.ndarray, 
+                       y_train_pred: np.ndarray, 
+                       y_test: np.ndarray, 
+                       y_test_pred: np.ndarray) -> None:
+        """
+        生成分析报告并保存为PDF
+        Args:
+            y_train: 训练集的真实值
+            y_train_pred: 训练集的预测值
+            y_test: 测试集的真实值
+            y_test_pred: 测试集的预测值
+        """
+        # 绘制训练集和测试集的散点图
+        self._plot_scatter(y_train, y_train_pred, y_test, y_test_pred)
+
+        # 绘制训练集和测试集的折线图
+        self._plot_line_chart(y_train, y_train_pred, y_test, y_test_pred)
+
+        # 绘制误差分布图
+        self._plot_error_distribution(y_test, y_test_pred)
+
+        # 关闭PDF文件
+        self.close()
+
+    def _plot_scatter(self, 
+                     y_train: np.ndarray, 
+                     y_train_pred: np.ndarray, 
+                     y_test: np.ndarray, 
+                     y_test_pred: np.ndarray) -> None:
+        """绘制训练集和测试集的散点图"""
+        plt.figure(figsize=(12, 8))
+
+        # 绘制训练集散点图
+        plt.scatter(y_train, y_train_pred, c='blue', label='Train Data', alpha=0.6)
+
+        # 绘制测试集散点图
+        plt.scatter(y_test, y_test_pred, c='red', label='Test Data', alpha=0.6)
+
+        # 绘制对角线
+        min_val = min(min(y_train), min(y_test))
+        max_val = max(max(y_train), max(y_test))
+        plt.plot([min_val, max_val], [min_val, max_val], 'k--', alpha=0.5)
+
+        # 计算评估指标
+        r2_train = r2_score(y_train, y_train_pred)
+        r2_test = r2_score(y_test, y_test_pred)
+        mae_train = mean_absolute_error(y_train, y_train_pred)
+        mae_test = mean_absolute_error(y_test, y_test_pred)
+        rmse_train = np.sqrt(mean_squared_error(y_train, y_train_pred))
+        rmse_test = np.sqrt(mean_squared_error(y_test, y_test_pred))
+
+        # 添加文本框显示评估指标
+        textstr = f'Train:\nR2 = {r2_train:.5f}\nMAE = {mae_train:.5f}\nRMSE = {rmse_train:.5f}\n\nTest:\nR2 = {r2_test:.5f}\nMAE = {mae_test:.5f}\nRMSE = {rmse_test:.5f}'
+        props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+        plt.text(0.05, 0.95, textstr, transform=plt.gca().transAxes, fontsize=10,
+                 verticalalignment='top', bbox=props)
+
+        plt.xlabel('Measured Value')
+        plt.ylabel('Predicted Value')
+        plt.title('Scatter Plot of Train and Test Data')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        self.pdf.savefig(bbox_inches='tight')
+        plt.close()
+
+    def _plot_line_chart(self, 
+                        y_train: np.ndarray, 
+                        y_train_pred: np.ndarray, 
+                        y_test: np.ndarray, 
+                        y_test_pred: np.ndarray) -> None:
+        """绘制训练集和测试集的折线图"""
+        plt.figure(figsize=(12, 8))
+
+        # 绘制训练集折线图
+        plt.plot(y_train, 'b-', label='Train True', alpha=0.6)
+        plt.plot(y_train_pred, 'b--', label='Train Pred', alpha=0.6)
+
+        # 绘制测试集折线图
+        plt.plot(range(len(y_train), len(y_train) + len(y_test)), y_test, 'r-', label='Test True', alpha=0.6)
+        plt.plot(range(len(y_train), len(y_train) + len(y_test)), y_test_pred, 'r--', label='Test Pred', alpha=0.6)
+
+        plt.xlabel('Sample Index')
+        plt.ylabel('Value')
+        plt.title('Line Chart of Train and Test Data')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        self.pdf.savefig(bbox_inches='tight')
+        plt.close()
+
+    def _plot_error_distribution(self, y_test: np.ndarray, y_test_pred: np.ndarray) -> None:
+        """绘制测试集的误差分布图"""
+        errors = y_test - y_test_pred
+        plt.figure(figsize=(12, 8))
+
+        # 绘制误差分布直方图
+        plt.hist(errors, bins=30, color='blue', alpha=0.6, label='Error Distribution')
+
+        # 添加均值和标准差线
+        mean_error = np.mean(errors)
+        std_error = np.std(errors)
+        plt.axvline(mean_error, color='red', linestyle='--', label=f'Mean Error: {mean_error:.5f}')
+        plt.axvline(mean_error + std_error, color='green', linestyle=':', label=f'Mean + Std: {mean_error + std_error:.5f}')
+        plt.axvline(mean_error - std_error, color='green', linestyle=':', label=f'Mean - Std: {mean_error - std_error:.5f}')
+
+        plt.xlabel('Error')
+        plt.ylabel('Frequency')
+        plt.title('Error Distribution of Test Data')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        self.pdf.savefig(bbox_inches='tight')
+        plt.close()
+
+    def close(self) -> None:
+        """关闭PDF文件"""
+        self.pdf.close()
+
+
+
 class CreateTrainReport:
     
 
@@ -45,13 +188,17 @@ class CreateTrainReport:
         Args:
             output_pdf_path: PDF报告的输出路径
         """
+        # 检查输出路径是否存在,如果不存在则创建
+        output_dir = os.path.dirname(output_pdf_path)
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir)
         self.output_pdf_path = output_pdf_path
         self.pdf = PdfPages(output_pdf_path)
         from nirapi.utils import run_optuna_v5,rebuild_model_v2
     def analyze_data(self, 
                     data_dict: Dict, 
-                    train_data: str = 'train',
-                    test_data: str = 'test',
+                    train_key: str = 'train',
+                    test_key: str = 'test',
                     exclude_date: Optional[Union[str, List[str]]] = None,
                     n_trials: int = 100,
                     **kw) -> pd.DataFrame:
@@ -62,22 +209,22 @@ class CreateTrainReport:
             train_date: 用于训练的日期
             exclude_date: 需要排除的日期列表
             n_trials: optuna优化迭代次数
-            kw: isReg:True   selected_metric:  ['mae','mse','r2','r',"accuracy", "precision", "recall"]
+            kw: isReg:True   selected_metric:  ['mae','mse','rmse','r2','r',"accuracy", "precision", "recall"]
         Returns:
             score_df: 包含预测结果的DataFrame
         """
         # 数据验证
         if not data_dict:
             raise ValueError("数据字典不能为空")
-        if train_data not in data_dict:
-            raise ValueError(f"训练日期 {train_data} 不在数据集中")
+        if train_key not in data_dict:
+            raise ValueError(f"关键字 {train_key} 不在数据集中")
             
             
         # 准备训练数据
         data_dict_train = data_dict.copy()
-        if test_data in data_dict:
-            data_dict_train.pop(test_data, None)
-            print(f"测试数据 {test_data} 已从数据集中移除")
+        if test_key in data_dict:
+            data_dict_train.pop(test_key, None)
+            print(f"测试数据 {test_key} 已从数据集中移除")
         if exclude_date:
             if isinstance(exclude_date, str):
                 exclude_date = [exclude_date]
@@ -87,16 +234,17 @@ class CreateTrainReport:
         # 运行模型训练和预测
         now = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
         try:
-        # if True:
             from nirapi.utils import run_optuna_v5
+            print(kw)
             results = run_optuna_v5(
                 data_dict_train, 
-                train_key=train_data, 
+                train_key=train_key, 
                 isReg=kw.get('isReg',True), 
                 chose_n_trails=n_trials, 
-                selected_metric=kw.get('selected_metric','r2'), 
+                # selected_metric=kw.get('selected_metric','r2'), 
                 save="./", 
-                save_name=f"temp_{now}"
+                save_name=f"temp_{now}",
+                **kw
             )
         except Exception as e:
             raise RuntimeError(f"模型训练失败: {str(e)}")
@@ -128,7 +276,7 @@ class CreateTrainReport:
         # 生成图表
         self._plot_prediction_results(score_df)
         self._plot_score_bars(score_df)
-        self._plot_test_data_results(data_dict,train_data,test_data,results)
+        self._plot_test_data_results(data_dict,train_key,test_key,results)
         self.close()
         
         return score_df
@@ -282,9 +430,44 @@ class CreateTrainReport:
         plt.close()
         
         # 绘制RMSE分布图
+        self.plot_test_line(y_test, y_pred)
         self.plot_rmse_distribution(y_test, y_pred, title='RMSE Distribution')
+        self.plot_mae_distribution(y_test, y_pred, title='MAE Distribution')
 
-
+    def plot_test_line(self, y_test, y_pred):
+        """
+        绘制测试集的折线图
+        Args:
+            y_test: 真实值
+            y_pred: 预测值
+        """
+        plt.figure(figsize=(12, 8))
+        
+        # 绘制真实值和预测值的折线
+        x = np.arange(len(y_test))
+        plt.plot(x, y_test, 'b-', label='真实值', alpha=0.6)
+        plt.plot(x, y_pred, 'r--', label='预测值', alpha=0.6)
+        
+        # 计算评估指标
+        from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
+        r2 = r2_score(y_test, y_pred)
+        mae = mean_absolute_error(y_test, y_pred)
+        rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+        
+        # 添加文本框显示评估指标
+        textstr = f'R2 = {r2:.5f}\nMAE = {mae:.5f}\nRMSE = {rmse:.5f}'
+        props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+        plt.text(0.05, 0.95, textstr, transform=plt.gca().transAxes, fontsize=10,
+                verticalalignment='top', bbox=props)
+        
+        plt.xlabel('样本序号')
+        plt.ylabel('值')
+        plt.title('测试集预测结果')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        self.pdf.savefig(bbox_inches='tight')
+        plt.close()
     def plot_rmse_distribution(self, y_true, y_pred, title='RMSE Distribution'):
         """
         绘制每个样本点的RMSE分布图
@@ -294,19 +477,20 @@ class CreateTrainReport:
             title: 图表标题
         """
         # 计算每个点的RMSE
-        rmse_per_point = np.sqrt((y_true - y_pred) ** 2)
+        rmse_per_point = np.abs(y_true - y_pred)  # 修改为绝对误差,因为RMSE是针对整体样本的概念
         plt.figure(figsize=(12, 8))
         
-        # 绘制RMSE分布散点图
+        # 绘制误差分布散点图
         plt.scatter(y_true, rmse_per_point, alpha=0.6)
         
         # 添加均值和标准差线
-        mean_rmse = np.mean(rmse_per_point)
+        mean_rmse = np.sqrt(np.mean((y_true - y_pred) ** 2))  # 计算整体RMSE
         std_rmse = np.std(rmse_per_point)
-        plt.axhline(y=mean_rmse, color='r', linestyle='--', label=f'Mean RMSE: {mean_rmse:.5f}')
+        plt.axhline(y=mean_rmse, color='r', linestyle='--', label=f'RMSE: {mean_rmse:.5f}')
         plt.axhline(y=mean_rmse + std_rmse, color='g', linestyle=':', label=f'Mean + Std: {(mean_rmse + std_rmse):.5f}')
         plt.axhline(y=mean_rmse - std_rmse, color='g', linestyle=':', label=f'Mean - Std: {(mean_rmse - std_rmse):.5f}')
-        # 找出RMSE最大的几个点
+        
+        # 找出误差最大的几个点
         worst_indices = np.argsort(rmse_per_point)[-5:]
         for idx in worst_indices:
             plt.annotate(f'idx={idx}\n({y_true[idx]:.2f}, {rmse_per_point[idx]:.5f})',
@@ -314,14 +498,59 @@ class CreateTrainReport:
                         xytext=(10, 10), textcoords='offset points',
                         bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.5),
                         arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'))
+        
         plt.xlabel('真实值')
-        plt.ylabel('RMSE')
+        plt.ylabel('绝对误差')
         plt.title(title)
         plt.legend()
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         self.pdf.savefig(bbox_inches='tight')
         plt.close()
+
+    def plot_mae_distribution(self, y_true, y_pred, title='MAE Distribution'):
+        """
+        绘制每个样本点的MAE分布图
+        Args:
+            y_true: 真实值
+            y_pred: 预测值
+            title: 图表标题
+        """
+        # 计算每个点的MAE
+        mae_per_point = np.abs(y_true - y_pred)
+        plt.figure(figsize=(12, 8))
+        
+        # 绘制MAE分布散点图
+        plt.scatter(y_true, mae_per_point, alpha=0.6)
+        
+        # 添加均值和标准差线
+        mean_mae = np.mean(mae_per_point)
+        std_mae = np.std(mae_per_point)
+        plt.axhline(y=mean_mae, color='r', linestyle='--', label=f'Mean MAE: {mean_mae:.5f}')
+        plt.axhline(y=mean_mae + std_mae, color='g', linestyle=':', label=f'Mean + Std: {(mean_mae + std_mae):.5f}')
+        plt.axhline(y=mean_mae - std_mae, color='g', linestyle=':', label=f'Mean - Std: {(mean_mae - std_mae):.5f}')
+        
+        # 找出MAE最大的几个点
+        worst_indices = np.argsort(mae_per_point)[-5:]
+        for idx in worst_indices:
+            plt.annotate(f'idx={idx}\n({y_true[idx]:.2f}, {mae_per_point[idx]:.5f})',
+                        (y_true[idx], mae_per_point[idx]),
+                        xytext=(10, 10), textcoords='offset points',
+                        bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.5),
+                        arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'))
+        
+        plt.xlabel('真实值')
+        plt.ylabel('MAE')
+        plt.title(title)
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        self.pdf.savefig(bbox_inches='tight')
+        plt.close()
+
+    
+
+        
     def add_text_with_level(self, text: Union[str, Dict], level: int = 1) -> None:
         """
         添加带层级的文字内容到PDF

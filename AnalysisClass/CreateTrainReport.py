@@ -54,6 +54,9 @@ class CreateReportbyData:
         output_dir = os.path.dirname(output_pdf_path)
         if output_dir and not os.path.exists(output_dir):
             os.makedirs(output_dir)
+        # 设置中文字体
+        plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
+        plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
         self.output_pdf_path = output_pdf_path
         self.pdf = PdfPages(output_pdf_path)
 
@@ -75,6 +78,9 @@ class CreateReportbyData:
 
         # 绘制训练集和测试集的折线图
         self._plot_line_chart(y_train, y_train_pred, y_test, y_test_pred)
+
+        # 绘制MAE分布图
+        self.plot_mae_distribution(y_test, y_test_pred)
 
         # 绘制误差分布图
         self._plot_error_distribution(y_test, y_test_pred)
@@ -133,21 +139,66 @@ class CreateReportbyData:
         plt.figure(figsize=(12, 8))
 
         # 绘制训练集折线图
-        plt.plot(y_train, 'b-', label='Train True', alpha=0.6)
-        plt.plot(y_train_pred, 'b--', label='Train Pred', alpha=0.6)
+        # plt.plot(y_train, 'b-', label='Train True', alpha=0.6)
+        # plt.plot(y_train_pred, 'b--', label='Train Pred', alpha=0.6)
 
+        plt.plot(y_test, 'b-', label='Train True', alpha=0.6)
+        plt.plot(y_test_pred, 'b--', label='Train Pred', alpha=0.6)
         # 绘制测试集折线图
-        plt.plot(range(len(y_train), len(y_train) + len(y_test)), y_test, 'r-', label='Test True', alpha=0.6)
-        plt.plot(range(len(y_train), len(y_train) + len(y_test)), y_test_pred, 'r--', label='Test Pred', alpha=0.6)
+        # plt.plot(range(len(y_train), len(y_train) + len(y_test)), y_test, 'r-', label='Test True', alpha=0.6)
+        # plt.plot(range(len(y_train), len(y_train) + len(y_test)), y_test_pred, 'r--', label='Test Pred', alpha=0.6)
 
         plt.xlabel('Sample Index')
         plt.ylabel('Value')
-        plt.title('Line Chart of Train and Test Data')
+        plt.title('Line Chart of Test Data')
         plt.legend()
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         self.pdf.savefig(bbox_inches='tight')
         plt.close()
+
+    
+    def plot_mae_distribution(self, y_true, y_pred, title='MAE Distribution'):
+        """
+        绘制每个样本点的MAE分布图
+        Args:
+            y_true: 真实值
+            y_pred: 预测值
+            title: 图表标题
+        """
+        # 计算每个点的MAE
+        mae_per_point = np.abs(y_true - y_pred)
+        plt.figure(figsize=(12, 8))
+        
+        # 绘制MAE分布散点图
+        plt.scatter(y_true, mae_per_point, alpha=0.6)
+        
+        # 添加均值和标准差线
+        mean_mae = np.mean(mae_per_point)
+        std_mae = np.std(mae_per_point)
+        plt.axhline(y=mean_mae, color='r', linestyle='--', label=f'Mean MAE: {mean_mae:.5f}')
+        plt.axhline(y=mean_mae + std_mae, color='g', linestyle=':', label=f'Mean + Std: {(mean_mae + std_mae):.5f}')
+        plt.axhline(y=mean_mae - std_mae, color='g', linestyle=':', label=f'Mean - Std: {(mean_mae - std_mae):.5f}')
+        
+        # 找出MAE最大的几个点
+        worst_indices = np.argsort(mae_per_point)[-5:]
+        for idx in worst_indices:
+            plt.annotate(f'idx={idx}\n({y_true[idx]:.2f}, {mae_per_point[idx]:.5f})',
+                        (y_true[idx], mae_per_point[idx]),
+                        xytext=(10, 10), textcoords='offset points',
+                        bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.5),
+                        arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'))
+        
+        plt.xlabel('Measured Value')
+        plt.ylabel('MAE')
+        plt.title(title)
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        self.pdf.savefig(bbox_inches='tight')
+        plt.close()
+
+    
 
     def _plot_error_distribution(self, y_test: np.ndarray, y_test_pred: np.ndarray) -> None:
         """绘制测试集的误差分布图"""
@@ -539,7 +590,7 @@ class CreateTrainReport:
                         bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.5),
                         arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'))
         
-        plt.xlabel('真实值')
+        plt.xlabel('Measured Value')
         plt.ylabel('MAE')
         plt.title(title)
         plt.legend()

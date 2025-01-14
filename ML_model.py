@@ -76,7 +76,6 @@ def custom_train_test_split(x, y, test_size, method = 'KS'):
         y = np.expand_dims(y, axis=-1)
 
         distance_x = cdist(x, x)
-        print(y.shape)
         distance_y = cdist(y, y)
 
         distance_x /= distance_x.max()

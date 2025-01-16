@@ -74,16 +74,16 @@ class CreateReportbyData:
             y_test_pred: 测试集的预测值
         """
         # 绘制训练集和测试集的散点图
-        self._plot_scatter(y_train, y_train_pred, y_test, y_test_pred)
+        # self._plot_scatter(y_train, y_train_pred, y_test, y_test_pred)
 
         # 绘制训练集和测试集的折线图
-        self._plot_line_chart(y_train, y_train_pred, y_test, y_test_pred)
+        # self._plot_line_chart(y_train, y_train_pred, y_test, y_test_pred)
 
         # 绘制MAE分布图
         self.plot_mae_distribution(y_test, y_test_pred)
 
         # 绘制误差分布图
-        self._plot_error_distribution(y_test, y_test_pred)
+        # self._plot_error_distribution(y_test, y_test_pred)
 
         # 关闭PDF文件
         self.close()

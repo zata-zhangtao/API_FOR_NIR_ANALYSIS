@@ -22,6 +22,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import cross_val_predict
 from scipy.signal import savgol_filter
 from pybaselines.whittaker import iarpls, airpls, derpsalsa
+from sklearn.linear_model import Lasso
 # 不做任何处理
 def return_inputs(*args):
     return args
@@ -928,6 +929,126 @@ def BayesianRidge(x_train, x_test, y_train, y_test, alpha_1=1.0, alpha_2=1.0, la
 
 
 
+def LassoRegression(x_train, x_test, y_train, y_test, alpha=1.0, max_iter=1000, tol=1e-4, 
+                    selection='cyclic', random_state=None, **kwargs):
+      # 初始化Lasso回归模型
+    lasso = Lasso(alpha=alpha, max_iter=max_iter, tol=tol, selection=selection, 
+                  random_state=random_state, **kwargs)
+    
+    # 训练模型
+    lasso.fit(x_train, y_train)
+    
+    # 进行预测
+    y_train_pred = lasso.predict(x_train)
+    y_test_pred = lasso.predict(x_test)
+    
+    # 返回结果
+    return y_train, y_test, y_train_pred, y_test_pred
+
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.metrics import mean_squared_error
+
+def GradientBoostingTreeRegression(x_train, x_test, y_train, y_test, n_estimators=100, learning_rate=0.1, max_depth=3, 
+                         min_samples_split=2, min_samples_leaf=1, max_features=None, random_state=None, **kwargs):
+    gbt = GradientBoostingRegressor(n_estimators=n_estimators, learning_rate=learning_rate, max_depth=max_depth,
+                                    min_samples_split=min_samples_split, min_samples_leaf=min_samples_leaf,
+                                    max_features=max_features, random_state=random_state, **kwargs)
+    
+    # 训练模型
+    gbt.fit(x_train, y_train)
+    
+    # 进行预测
+    y_train_pred = gbt.predict(x_train)
+    y_test_pred = gbt.predict(x_test)
+    
+    # 返回结果
+    return y_train, y_test, y_train_pred, y_test_pred
+
+import xgboost as xgb
+from sklearn.metrics import mean_squared_error
+
+def XGBoostRegression(x_train, x_test, y_train, y_test, n_estimators=100, learning_rate=0.1, max_depth=3, 
+                      min_child_weight=1, subsample=1.0, colsample_bytree=1.0, reg_alpha=0, reg_lambda=1, 
+                      random_state=None, **kwargs):
+    # 初始化XGBoost回归模型
+    xg_reg = xgb.XGBRegressor(n_estimators=n_estimators, learning_rate=learning_rate, max_depth=max_depth,
+                              min_child_weight=min_child_weight, subsample=subsample, colsample_bytree=colsample_bytree,
+                              reg_alpha=reg_alpha, reg_lambda=reg_lambda, random_state=random_state, **kwargs)
+    
+    # 训练模型
+    xg_reg.fit(x_train, y_train)
+    
+    # 进行预测
+    y_train_pred = xg_reg.predict(x_train)
+    y_test_pred = xg_reg.predict(x_test)
+    
+    # 返回结果
+    return y_train, y_test, y_train_pred, y_test_pred
+
+
+from catboost import CatBoostRegressor
+from sklearn.metrics import mean_squared_error
+
+def CatBoostRegression(x_train, x_test, y_train, y_test, cat_features=None, n_estimators=100, learning_rate=0.1, 
+                       depth=6, l2_leaf_reg=3, random_state=None, verbose=0, **kwargs):
+    # 初始化CatBoost回归模型
+    cat_reg = CatBoostRegressor(n_estimators=n_estimators, learning_rate=learning_rate, depth=depth,
+                                l2_leaf_reg=l2_leaf_reg, random_state=random_state, verbose=verbose, **kwargs)
+    
+    # 训练模型
+    cat_reg.fit(x_train, y_train, cat_features=cat_features)
+    
+    # 进行预测
+    y_train_pred = cat_reg.predict(x_train)
+    y_test_pred = cat_reg.predict(x_test)
+    
+    # 返回结果
+    return y_train, y_test, y_train_pred, y_test_pred
+
+from sklearn.neural_network import MLPRegressor
+from sklearn.metrics import mean_squared_error
+
+def MLPRegression(x_train, x_test, y_train, y_test, hidden_layer_sizes=(100,), activation='relu', 
+                  solver='adam', alpha=0.0001, batch_size='auto', learning_rate='constant', 
+                  learning_rate_init=0.001, max_iter=200, shuffle=True, random_state=None, verbose=False, **kwargs):
+    # 初始化MLP回归模型
+    mlp_reg = MLPRegressor(hidden_layer_sizes=hidden_layer_sizes, activation=activation, solver=solver,
+                           alpha=alpha, batch_size=batch_size, learning_rate=learning_rate,
+                           learning_rate_init=learning_rate_init, max_iter=max_iter, shuffle=shuffle,
+                           random_state=random_state, verbose=verbose, **kwargs)
+    
+    # 训练模型
+    mlp_reg.fit(x_train, y_train)
+    
+    # 进行预测
+    y_train_pred = mlp_reg.predict(x_train)
+    y_test_pred = mlp_reg.predict(x_test)
+    
+    # 返回结果
+    return y_train, y_test, y_train_pred, y_test_pred
+
+import lightgbm as lgb
+from sklearn.metrics import mean_squared_error
+
+def LightGBMRegression(x_train, x_test, y_train, y_test, num_leaves=31, learning_rate=0.1, n_estimators=100, 
+                       max_depth=-1, min_child_samples=20, subsample=1.0, colsample_bytree=1.0, 
+                       reg_alpha=0.0, reg_lambda=0.0, random_state=None, **kwargs):
+    # 初始化LightGBM回归模型
+    lgb_reg = lgb.LGBMRegressor(num_leaves=num_leaves, learning_rate=learning_rate, n_estimators=n_estimators,
+                                max_depth=max_depth, min_child_samples=min_child_samples, subsample=subsample,
+                                colsample_bytree=colsample_bytree, reg_alpha=reg_alpha, reg_lambda=reg_lambda,
+                                random_state=random_state, **kwargs)
+    
+    # 训练模型
+    lgb_reg.fit(x_train, y_train)
+    
+    # 进行预测
+    y_train_pred = lgb_reg.predict(x_train)
+    y_test_pred = lgb_reg.predict(x_test)
+    
+    # 返回结果
+    return y_train, y_test, y_train_pred, y_test_pred
+
 
 #######################################################################################################################################
 ##########################################################分类模型 #####################################################################
@@ -1105,7 +1226,7 @@ def XGBoost(X_train, X_test, y_train, y_test, n_estimators=100, learning_rate=0.
 
 
 
-def LactateNet(X_train, X_test, y_train, y_test,  epochs=3000, batch_size=8, learning_rate=0.001, weight_decay=0.01, patience=100):
+def LactateNet(X_train, X_test, y_train, y_test,  epochs=3000, batch_size=32, learning_rate=0.001, weight_decay=0.01, patience=100):
     """
     训练并评估 LactateNet 模型
     -----
@@ -1145,7 +1266,7 @@ def LactateNet(X_train, X_test, y_train, y_test,  epochs=3000, batch_size=8, lea
         >>>X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
         >>># 训练和评估模型
-        >>>train_r2, test_r2, train_rmse, test_rmse = train_and_evaluate_LactateNet(X_train, X_test, y_train, y_test, input_size=X_train.shape[1])
+        >>>data = LactateNet(X_train, X_test, y_train, y_test)
     """
     
     # 定义数据集类
@@ -1203,10 +1324,13 @@ def LactateNet(X_train, X_test, y_train, y_test,  epochs=3000, batch_size=8, lea
     train_dataset = CustomDataset(X_train.astype(np.float32), y_train.astype(np.float32))
     test_dataset = CustomDataset(X_test.astype(np.float32), y_test.astype(np.float32))
     
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,drop_last=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size,drop_last=True)
 
     # 初始化模型
+    import os
+    if os.path.exists('best_model.pth'):
+        os.remove('best_model.pth')
     model = LactateNet(input_size=X_train.shape[1])
     criterion = nn.HuberLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)

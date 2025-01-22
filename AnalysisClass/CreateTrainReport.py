@@ -284,7 +284,8 @@ class CreateTrainReport:
 
         # 运行模型训练和预测
         now = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        try:
+        # try:
+        if True:
             from nirapi.utils import run_optuna_v5
             print(kw)
             results = run_optuna_v5(
@@ -297,8 +298,8 @@ class CreateTrainReport:
                 save_name=f"temp_{now}",
                 **kw
             )
-        except Exception as e:
-            raise RuntimeError(f"模型训练失败: {str(e)}")
+        # except Exception as e:
+        #     raise RuntimeError(f"模型训练失败: {str(e)}")
 
         # 计算评分
         acc_score = {}

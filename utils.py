@@ -50,7 +50,7 @@ import datetime
 from nirapi.AnalysisClass.CreateTrainReport import CreateTrainReport
 
 
-def train_model_for_trick_game_v2(splited_data=None, X=None, y=None, test_size=0.34,  n_trials=100, selected_metric="rmse", target_score=0.0002,filename = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),**kw):
+def train_model_for_trick_game_v2(max_attempts = 10,splited_data=None, X=None, y=None, test_size=0.34,  n_trials=100, selected_metric="rmse", target_score=0.0002,filename = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),**kw):
     
     """
     -----
@@ -86,12 +86,37 @@ def train_model_for_trick_game_v2(splited_data=None, X=None, y=None, test_size=0
     Returns:
     -----
         - None
+    -----
+ 
+        import numpy as np
+        from sklearn.model_selection import train_test_split
+        from nirapi.utils import *
+
+        np.random.seed(42)  # For reproducibility
+        n_samples = 1000
+        n_features = 1000  # Assuming similar dimensionality as original spectra
+
+        Spectrumes = np.random.randn(n_samples, n_features)
+        Lactate = np.random.uniform(0, 10, n_samples)
+
+        X_train, X_test, y_train, y_test = train_test_split(Spectrumes, Lactate, test_size=0.34, random_state=42)
+        kw = {
+        "selected_outlier" :     ["不做异常值去除"],
+        "selected_preprocess" :  [ "move_avg"],
+        "preprocess_number_input" : 1,
+        "selected_feat_sec" : ["remove_high_variance_and_normalize"],
+        "selected_dim_red" : ["pca"],
+        "selected_model" : [ "SVR"]
+        }
+        train_model_for_trick_game_v2(splited_data=(X_train, X_test, y_train, y_test), test_size=0.34,  n_trials=100, selected_metric="rmse", target_score=0.0002,filename = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")+"_人体乳酸_加心率——混合建模", **kw)
+            
+
     """
 
     
     
     best_score = np.inf
-    max_attempts = 10  # 最大重试次数
+    # max_attempts = 10  # 最大重试次数
     attempt = 0
     
     while best_score >= target_score and attempt < max_attempts:
@@ -2324,6 +2349,52 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
                     'weight_decay': trial.suggest_float('LactateNet_weight_decay', 0.001, 1.0),
                     'patience': trial.suggest_int('LactateNet_patience', 1, 100),
                 }],
+                'LassoRegression': [AF.LassoRegression, {'alpha': trial.suggest_float('LassoRegression_alpha', 0.01, 1.0),
+                                                            'max_iter': trial.suggest_int('LassoRegression_max_iter', 100, 1000),
+                                                            'tol': trial.suggest_float('LassoRegression_tol', 1e-5, 1e-2),
+                                                            'selection': trial.suggest_categorical('LassoRegression_selection', ['cyclic', 'random']),
+                                                            'random_state': trial.suggest_int('LassoRegression_random_state', 1, 100)}],
+                'GradientBoostingTreeRegression': [AF.GradientBoostingTreeRegression, {'n_estimators': trial.suggest_int('GradientBoostingTree_n_estimators', 1, 100),
+                                                                'learning_rate': trial.suggest_float('GradientBoostingTree_learning_rate', 0.01, 1.0),
+                                                                'max_depth': trial.suggest_int('GradientBoostingTree_max_depth', 1, 100),
+                                                                'min_samples_split': trial.suggest_int('GradientBoostingTree_min_samples_split', 2, 100),
+                                                                'min_samples_leaf': trial.suggest_int('GradientBoostingTree_min_samples_leaf', 1, 100),
+                                                                'max_features': trial.suggest_categorical('GradientBoostingTree_max_features', [None, 'sqrt', 'log2']),
+                                                                'random_state': trial.suggest_int('GradientBoostingTree_random_state', 1, 100)}],
+                'XGBoostRegression': [AF.XGBoostRegression, {'n_estimators': trial.suggest_int('XGBoostRegression_n_estimators', 1, 100),
+                                                            'learning_rate': trial.suggest_float('XGBoostRegression_learning_rate', 0.01, 1.0),
+                                                            'max_depth': trial.suggest_int('XGBoostRegression_max_depth', 1, 100),
+                                                            'min_child_weight': trial.suggest_int('XGBoostRegression_min_child_weight', 1, 10),
+                                                            'subsample': trial.suggest_float('XGBoostRegression_subsample', 0.1, 1.0),
+                                                            'colsample_bytree': trial.suggest_float('XGBoostRegression_colsample_bytree', 0.1, 1.0),
+                                                            'reg_alpha': trial.suggest_float('XGBoostRegression_reg_alpha', 0.0, 1.0),
+                                                            'reg_lambda': trial.suggest_float('XGBoostRegression_reg_lambda', 0.0, 1.0),
+                                                            'random_state': trial.suggest_int('XGBoostRegression_random_state', 1, 100)}],
+                'CatBoostRegression': [AF.CatBoostRegression, {'n_estimators': trial.suggest_int('CatBoostRegression_n_estimators', 1, 100),
+                                                            'learning_rate': trial.suggest_float('CatBoostRegression_learning_rate', 0.01, 1.0),
+                                                            'depth': trial.suggest_int('CatBoostRegression_depth', 1, 10),
+                                                            'l2_leaf_reg': trial.suggest_float('CatBoostRegression_l2_leaf_reg', 0.0, 10.0),
+                                                            'random_state': trial.suggest_int('CatBoostRegression_random_state', 1, 100)}],
+                'MLPRegression': [AF.MLPRegression, {'hidden_layer_sizes': trial.suggest_categorical('MLPRegression_hidden_layer_sizes',[(100,), (50, 50), (100, 50, 25)]),
+                                                    'activation': trial.suggest_categorical('MLPRegression_activation', ['relu', 'tanh', 'logistic']),
+                                                    'solver': trial.suggest_categorical('MLPRegression_solver', ['adam', 'sgd', 'lbfgs']),
+                                                    'alpha': trial.suggest_float('MLPRegression_alpha', 1e-5, 1e-1, log=True),
+                                                    'batch_size': trial.suggest_categorical('MLPRegression_batch_size', ['auto', 32, 64, 128]),
+                                                    'learning_rate': trial.suggest_categorical('MLPRegression_learning_rate', ['constant', 'invscaling', 'adaptive']),
+                                                    'learning_rate_init': trial.suggest_float('MLPRegression_learning_rate_init', 1e-4, 1e-1, log=True),
+                                                    'max_iter': trial.suggest_int('MLPRegression_max_iter', 100, 1000),
+                                                    'random_state': trial.suggest_int('MLPRegression_random_state', 1, 100)}],
+                'LightGBMRegression': [AF.LightGBMRegression, {'num_leaves': trial.suggest_int('LightGBMRegression_num_leaves', 10, 100),
+                                                       'learning_rate': trial.suggest_float('LightGBMRegression_learning_rate', 0.01, 0.3),
+                                                       'n_estimators': trial.suggest_int('LightGBMRegression_n_estimators', 50, 500),
+                                                       'max_depth': trial.suggest_int('LightGBMRegression_max_depth', 3, 15),
+                                                       'min_child_samples': trial.suggest_int('LightGBMRegression_min_child_samples', 10, 100),
+                                                       'subsample': trial.suggest_float('LightGBMRegression_subsample', 0.5, 1.0),
+                                                       'colsample_bytree': trial.suggest_float('LightGBMRegression_colsample_bytree', 0.5, 1.0),
+                                                       'reg_alpha': trial.suggest_float('LightGBMRegression_reg_alpha', 0.0, 1.0),
+                                                       'reg_lambda': trial.suggest_float('LightGBMRegression_reg_lambda', 0.0, 1.0),
+                                                       'random_state': trial.suggest_int('LightGBMRegression_random_state', 1, 100)}],
+
 
 
                 'LogisticRegression':[AF.logr,{}],
@@ -2474,7 +2545,7 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
             return np.mean( [ds['score'] for key,ds in dataset_scores.items() if key is not train_key] )
             # return np.mean([ds['score'] for ds in dataset_scores.values() ])
         except Exception as e:
-            print(f"Error in trial {trial.number}: {str(e)}")
+            print(f"Error in trial {trial.number} at line {traceback.extract_tb(e.__traceback__)[-1].lineno}: {str(e)}")
             return None
 
     # 创建和运行Optuna研究
@@ -2696,7 +2767,14 @@ def rebuild_model_v2(splited_data=None, params_dict:dict=None):
                 'RFR(随机森林回归)': [AF.RFR, {}],
                 'BayesianRidge': [AF.BayesianRidge, {}],
                 'LactateNet': [AF.LactateNet, {}],
+                'LassoRegression': [AF.LassoRegression, {}],
+                'GradientBoostingTreeRegression': [AF.GradientBoostingTreeRegression, {}],
+                'XGBoostRegression': [AF.XGBoostRegression, {}],
+                'CatBoostRegression': [AF.CatBoostRegression, {}],
+                'MLPRegression': [AF.MLPRegression, {}],
+                'LightGBMRegression': [AF.LightGBMRegression, {}],
                 
+
                 'LogisticRegression':[AF.logr,{}],
                 'SVM': [AF.SVM, {}],
                 'DT': [AF.DT, {}],

@@ -15,6 +15,8 @@ import os
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 
+
+
 class BaseClass:
     def __init__(self):
         pass
@@ -414,6 +416,206 @@ class SpectrumTransformerByNN(BaseEstimator, TransformerMixin):
         
         return output_data
     
+
+
+
+class conv_MatMul_recom(BaseEstimator,TransformerMixin):
+
+    """这玩意不行,只能手工去调
+    """
+    S21 = pd.read_csv("S21_6波段.csv").values
+    wavelength_merged = np.linspace(1245,1750,1200)
+    band_point_num = 200
+    def __int__(self):
+        pass
+    def fit(self):
+        pass
+    def transform(self,pd_sample,pd_source):
+        def rec(PD):
+            rec_PD_list = []
+            for i in range(self.S21.shape[1]):
+                N = self.band_point_num
+                conv_matrix = np.zeros((N, N))
+                for j in range(N):
+                    conv_matrix[j] = np.roll(self.S21[:,i], j)
+                s21_m  = conv_matrix
+                pd = PD[i*self.band_point_num:(i+1)*self.band_point_num]
+                rec_PD_list.append(np.dot(pd.reshape(1,200),np.linalg.inv(s21_m)).reshape(-1))
+            return np.concatenate(rec_PD_list)
+        rec_PD_sample_list = rec(pd_sample)
+        rec_PD_source_list = rec(pd_source)
+        print(rec_PD_sample_list.shape)
+        print(rec_PD_sample_list)
+        return rec_PD_sample_list*20/rec_PD_source_list
+
+        
+
+
+
+    
+
+class conv_DFT_recon(BaseEstimator,TransformerMixin):
+    S21_lp_nums = [1, 1, 1, 1, 1, 1]
+    S21 = pd.read_csv("S21_6波段.csv").values
+    shifter =[110, 87, 80, 110, 95, 100]
+    band_point_num = 200
+    wavelength = [
+                np.linspace(1245, 1410, 200),  # 第1波段: 1245-1410nm
+                np.linspace(1320, 1490, 200),  # 第2波段: 1320-1490nm
+                np.linspace(1390, 1555, 200),  # 第3波段: 1390-1555nm
+                np.linspace(1485, 1655, 200),  # 第4波段: 1485-1655nm
+                np.linspace(1525, 1675, 200),  # 第5波段: 1525-1675nm
+                np.linspace(1545, 1750, 200),  # 第6波段: 1545-1750nm
+            ]
+
+    wavelength_merged = np.linspace(1245,1750,1200)
+    def __init__(self):
+        pass
+        
+    def fit(self):
+        return 
+    def transform(self,pd_sample,pd_source):
+        """进行重建
+        """
+        def rec(PD):
+            rec_PD_list = []
+            for i in range(self.S21.shape[1]):
+                pd = PD[i*self.band_point_num:(i+1)*self.band_point_num]
+                s21 = self.S21[:,i]
+                lp_num = self.S21_lp_nums[i]
+
+                pd_fft = np.fft.fft(pd)
+                s21_fft = np.fft.fft(s21)
+                lp = np.zeros(pd.shape[0])
+                lp[0] = 1
+                lp[1 : lp_num + 1] = 1
+                lp[-lp_num:] = 1
+                pd_fft_lp = pd_fft * lp
+                recon = np.fft.ifft(pd_fft_lp / s21_fft)
+                recon = np.where(np.real(recon) < 0, 0, recon)
+                recon = np.abs(recon)
+                recon = np.flip(recon)
+                recon = np.roll(recon, self.shifter[i])
+                rec_PD_list.append(recon)
+            return np.concatenate(rec_PD_list)
+        rec_PD_sample_list = rec(pd_sample)
+        rec_PD_source_list = rec(pd_source)
+        return rec_PD_sample_list/rec_PD_source_list
+
+    def fit_transform(self,pd_sample,pd_source):
+        return self.transform(pd_sample,pd_source)
+
+    def transform_merge(self, pd_sample, pd_source):
+        """
+        重建之后把相同波段的光谱强度进行合并。
+
+        Args:
+            pd_sample:  输入样本数据 (Pandas DataFrame).
+            pd_source:  源数据 (Pandas DataFrame).
+
+        Returns:
+            sorted_intensities: 合并后的排序好的光谱强度值 (Numpy array).
+        """
+
+        recon = self.transform(pd_sample, pd_source)
+
+        band_points = [self.band_point_num for i in range(len(self.S21_lp_nums))]
+        band_indices = np.cumsum([0] + band_points[:-1])
+
+        indices = [
+            np.arange(start, start + points)
+            for start, points in zip(band_indices, band_points)
+        ]
+
+        # 使用 numpy 数组直接累加，避免字典的开销
+        # 首先确定最终数组的大小，即所有波长的数量
+        all_wavelengths = np.concatenate(self.wavelength)
+        unique_wavelengths = np.unique(all_wavelengths)  # 去重，确保每个波长只计算一次
+        sorted_wavelengths = np.sort(unique_wavelengths) #排序波长
+        num_wavelengths = len(sorted_wavelengths)
+        sorted_intensities = np.zeros(num_wavelengths)
+
+        # 创建一个波长到索引的映射，方便快速查找
+        wavelength_to_index = {wl: i for i, wl in enumerate(sorted_wavelengths)}
+
+        # 遍历每个波段的数据，累加强度值
+        for i, idx in enumerate(indices):
+            wavelengths = self.wavelength[i]
+            intensities = recon[idx]
+
+            # 确保波长和强度数组长度一致
+            if len(wavelengths) != len(intensities):
+                raise ValueError("波长和强度数组长度不一致！")
+
+            # 累加强度值
+            for j, wl in enumerate(wavelengths):
+                index = wavelength_to_index[wl]  # 找到波长对应的索引
+                sorted_intensities[index] += intensities[j]
+
+        print("Sorted Wavelengths:", sorted_wavelengths.shape)
+        print("Sorted Intensities:", sorted_intensities.shape)
+
+        return sorted_intensities
+
+    def transform_cut_inter_smooth(self,pd_sample,pd_source,left_b = [40, 50, 55, 50, 70, 70],right_b = [140, 130, 165, 140, 130, 130] ):
+        """重建之后进行剪切，把两边的数据切掉
+        """
+
+        spectral_data = self.transform(pd_sample,pd_source)
+        
+        valid_wavelengths = []
+        valid_spectral = []
+        for i, points in enumerate([self.band_point_num for _ in left_b]):
+            valid_spectral_data = spectral_data[i * points : (i + 1) * points]
+            valid_spectral_data = valid_spectral_data[left_b[i] : right_b[i]]
+            valid_spectral.append(valid_spectral_data)
+
+            full_wavelengths = np.concatenate(self.wavelength)
+            valid_wavelength = full_wavelengths[i * points : (i + 1) * points]
+            valid_wavelength = valid_wavelength[left_b[i] : right_b[i]]
+            valid_wavelengths.append(valid_wavelength)
+
+        spectral = np.concatenate(valid_spectral)
+        wavelength = np.concatenate(valid_wavelengths)
+
+
+
+        sort_indices = np.argsort(wavelength)
+        wavelength = wavelength[sort_indices]
+        spectral = spectral[sort_indices]
+
+        from scipy.interpolate import interp1d
+        f = interp1d(wavelength,spectral,kind="linear",fill_value="extrapolate")
+        spectral_interpolated = f(self.wavelength_merged)
+
+        # smooth
+        from scipy.signal import savgol_filter
+
+        spectral_smooth = savgol_filter(spectral_interpolated,window_length=30,polyorder=3)
+
+        return spectral_smooth
+
+
+
+
+class conv_multi_rec_func_merge(BaseEstimator,TransformerMixin):
+    rec_dic_class =  SpectralDictionaryMapper()
+    rec_dft_class = conv_DFT_recon()
+    wavelength_merged = np.linspace(1245,1750,1200)
+
+    def __init__(self):
+        pass
+
+    def fit(self,pd_samples,ft_spectra):
+        self.rec_dic_class.fit(pd_samples,ft_spectra)
+    def transform(self,pd_sample,pd_source):
+        # rec_dic = self.rec_dic_class.transform(pd_sample)
+        
+        rec_dic = 0
+        rec_dft = self.rec_dft_class.transform_cut_inter_smooth(pd_sample,pd_source)
+        # 需要修改这里的W
+        W = 1
+        return rec_dic + rec_dft*W 
 
 
 if __name__ == "__main__":

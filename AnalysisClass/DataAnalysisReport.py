@@ -1877,8 +1877,14 @@ if __name__ == "__main__":
         
         # 从数据库获取数据集
         dataset_X = get_dataset_from_mysql(database='光谱数据库',table_name="复享光谱仪", project_name="多发光单收光探头血糖数据", X_type=['光谱',"采集日期","志愿者"])
-
-        
+        """
+        dataset_X = {
+            "光谱": np.array of shape (n_samples,n_feats)   # 这个是必须要有
+            "实测值": np.array of shape (n_samples,)        # 这个是必须要有
+            "其他": np.array of shape (n_samples,n_feats)     # 这个是可以有,但是不是必须要有
+        } 
+         
+        """
         # 生成报告
         output_path = '数据分析报告.pdf'
         report_path = generate_analysis_report(dataset_X, output_path)

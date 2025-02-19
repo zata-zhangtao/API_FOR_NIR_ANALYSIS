@@ -4279,7 +4279,7 @@ def plot_2d_pca_combined(train_data, val_data, test_data, label_col='label', n_c
     # Show the plot
     plt.show()
 
-def reconForMZI_CVX(PD_list,s21_data_path = 'S21.mat'):
+def reconForMZI_CVX(PD_list,s21_data_path = 'S21-2.mat'):
     '''MZI样机的重建算法，采用凸优化方法，输入为S21数据和PD值列表，输出为重建的S21数据
     ------
     parameters:
@@ -4352,7 +4352,14 @@ def reconForMZI_CVX(PD_list,s21_data_path = 'S21.mat'):
 
     alpha1_meas = [a_band1, a_band2, a_band3, a_band4]  # 四个区间的参数
     alpha1_source = np.array([0.05, 0.05, 0.05, 0.05])
-    s21_data = loadmat(s21_data_path)
+
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # 构建 S21.mat 文件的完整路径
+    s21_full_path = os.path.join(current_dir, s21_data_path)
+    s21_data = loadmat(s21_full_path)
+    # s21_data = loadmat(s21_data_path)
     wl = s21_data['wl'].squeeze()
 
     S21_main_95_T = s21_data['S21_main_95_T'].T  # (81,2000)

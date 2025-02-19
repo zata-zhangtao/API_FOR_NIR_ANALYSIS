@@ -384,27 +384,7 @@ def d2(X_train, X_test, y_train, y_test):
     X_test_d2 = calculate_second_derivative(X_test)
 
     return X_train_d2, X_test_d2, y_train, y_test
-def d2_old(X_train, X_test, y_train, y_test):
-    """ Second derivative
-    :param X_train: raw spectrum training data, shape (n_train_samples, n_features)
-    :param X_test: raw spectrum testing data, shape (n_test_samples, n_features)
-    :param y_train: training labels
-    :param y_test: testing labels
-    :return: X_train_d2, X_test_d2, y_train, y_test
-    """
-    def calculate_second_derivative(data):
-        if isinstance(data, pd.DataFrame):
-            data = data.values
-        temp2 = (pd.DataFrame(data)).diff(axis=1)
-        temp3 = np.delete(temp2.values, 0, axis=1)
-        temp4 = (pd.DataFrame(temp3)).diff(axis=1)
-        spec_D2 = np.delete(temp4.values, 0, axis=1)
-        return spec_D2
 
-    X_train_d2 = calculate_second_derivative(X_train)
-    X_test_d2 = calculate_second_derivative(X_test)
-
-    return X_train_d2, X_test_d2, y_train, y_test
 
 def move_avg(X_train, X_test, y_train, y_test, window_size=11):
     """滑动平均滤波
@@ -477,7 +457,6 @@ def baseline_airpls(X_train, X_test, y_train, y_test, lam=1000):
 
     return X_train_airpls, X_test_airpls, y_train, y_test
 
-import copy
 
 def baseline_derpsalsa(X_train, X_test, y_train, y_test, lam=1000):
     """Baseline correction using DERPSALSA
@@ -1225,7 +1204,6 @@ def XGBoost(X_train, X_test, y_train, y_test, n_estimators=100, learning_rate=0.
     return y_train, y_test, y_train_pred, y_test_pred
 
 
-
 def LactateNet(X_train, X_test, y_train, y_test,  epochs=3000, batch_size=32, learning_rate=0.001, weight_decay=0.01, patience=100):
     """
     训练并评估 LactateNet 模型
@@ -1273,10 +1251,15 @@ def LactateNet(X_train, X_test, y_train, y_test,  epochs=3000, batch_size=32, le
     from torch.utils.data import Dataset, DataLoader
     import torch.nn as nn
     import torch
+    
+    # 检查是否有可用的GPU
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f'Using device: {device}')
+    
     class CustomDataset(Dataset):
         def __init__(self, X, y):
-            self.X = torch.FloatTensor(X)
-            self.y = torch.FloatTensor(y)
+            self.X = torch.FloatTensor(X).to(device)
+            self.y = torch.FloatTensor(y).to(device)
             
         def __len__(self):
             return len(self.X)
@@ -1331,7 +1314,7 @@ def LactateNet(X_train, X_test, y_train, y_test,  epochs=3000, batch_size=32, le
     import os
     if os.path.exists('best_model.pth'):
         os.remove('best_model.pth')
-    model = LactateNet(input_size=X_train.shape[1])
+    model = LactateNet(input_size=X_train.shape[1]).to(device)
     criterion = nn.HuberLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=20, verbose=True)
@@ -1385,59 +1368,13 @@ def LactateNet(X_train, X_test, y_train, y_test,  epochs=3000, batch_size=32, le
     # 加载最佳模型
     model.load_state_dict(torch.load('best_model.pth'))
 
-    # 绘制损失曲线
-    # plt.figure(figsize=(10, 6))
-    # plt.plot(train_losses, label='训练损失')
-    # plt.plot(test_losses, label='测试损失')
-    # plt.xlabel('迭代次数')
-    # plt.ylabel('损失')
-    # plt.title('训练和测试损失曲线')
-    # plt.legend()
-    # plt.show()
-
     # 预测结果可视化
     model.eval()
     with torch.no_grad():
-        train_pred = model(torch.FloatTensor(X_train.astype(np.float32))).numpy().reshape(-1)
-        test_pred = model(torch.FloatTensor(X_test.astype(np.float32))).numpy().reshape(-1)
+        train_pred = model(torch.FloatTensor(X_train.astype(np.float32)).to(device)).cpu().numpy().reshape(-1)
+        test_pred = model(torch.FloatTensor(X_test.astype(np.float32)).to(device)).cpu().numpy().reshape(-1)
 
-    ## 计算评估指标
-    # train_r2 = r2_score(y_train, train_pred)
-    # test_r2 = r2_score(y_test, test_pred)
-    # train_rmse = np.sqrt(mean_squared_error(y_train, train_pred))
-    # test_rmse = np.sqrt(mean_squared_error(y_test, test_pred))
-
-    # plt.figure(figsize=(12, 5))
-    
-    # plt.subplot(1, 2, 1)
-    # plt.scatter(y_train, train_pred, c='blue', label=f'训练集 (R²={train_r2:.3f}, RMSE={train_rmse:.3f})')
-    # plt.plot([min(y_train), max(y_train)], [min(y_train), max(y_train)], 'r--')
-    # plt.xlabel('实际值')
-    # plt.ylabel('预测值')
-    # plt.title('训练集预测结果')
-    # plt.legend()
-
-    # plt.subplot(1, 2, 2)
-    # plt.scatter(y_test, test_pred, c='green', label=f'测试集 (R²={test_r2:.3f}, RMSE={test_rmse:.3f})')
-    # plt.plot([min(y_test), max(y_test)], [min(y_test), max(y_test)], 'r--')
-    # plt.xlabel('实际值')
-    # plt.ylabel('预测值')
-    # plt.title('测试集预测结果')
-    # plt.legend()
-
-    # # 绘制测试集的变化趋势
-    # plt.figure(figsize=(10, 6))
-    # plt.plot(y_test, 'b-', label='实际值')
-    # plt.plot(test_pred, 'r--', label='预测值')
-    # plt.xlabel('样本序号')
-    # plt.ylabel('目标值')
-    # plt.title('测试集目标值变化趋势')
-    # plt.legend()
-    
-    # plt.tight_layout()
-    # plt.show()
     return y_train, y_test, train_pred, test_pred
-    # return train_r2, test_r2, train_rmse, test_rmse
 
 
 

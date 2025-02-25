@@ -53,6 +53,20 @@ from nirapi.AnalysisClass.CreateTrainReport import CreateTrainReport
 def train_model_for_trick_game_v2(max_attempts = 10,splited_data=None, X=None, y=None, test_size=0.34,  n_trials=100, selected_metric="rmse", target_score=0.0002,filename = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),**kw):
     
     """
+    v2 compared to the v1 
+    | Feature                  | Original Version                  | V2 Version                                     |
+    |--------------------------|-----------------------------------|-----------------------------------------------|
+    | Input Data               | Only `X` and `y`                  | Adds `splited_data` for pre-split datasets     |
+    | Customization            | Fixed pipeline                    | Configurable via `**kw` (preprocessing, etc.)  |
+    | Documentation            | Minimal                           | Detailed docstring with example                |
+    | `max_attempts`           | Hardcoded (10)                    | Configurable parameter (default 10)            |
+    | Data Splitting           | Always splits internally          | Conditional splitting if `splited_data` is None|
+    | Pipeline Flexibility     | None                              | Supports outlier removal, preprocessing, etc.  |
+    | Model Options            | Implicitly fixed                  | Explicitly supports multiple models            |
+
+    ---
+
+
     -----
     Parameters:
     -----
@@ -186,6 +200,14 @@ def train_model_for_trick_game_v2(max_attempts = 10,splited_data=None, X=None, y
 
 
 def train_model_for_trick_game( X, y, test_size=0.34,  n_trials=100, selected_metric="rmse", target_score=0.0002,filename = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")):
+    
+    warnings.warn(
+        "此函数已废弃，将于2025-04-01被删除，请使用 `train_model_for_trick_game_v2` 替代。",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
+    
     best_score = np.inf
     max_attempts = 10  # 最大重试次数
     attempt = 0
@@ -288,6 +310,10 @@ def PCA_LR_SVR_trian_and_eval(X,y,category = "all_samples",processed_X = None,fe
     ------
         - None
     """
+
+    warnings.warn(
+       "此函数已废弃，将于2025-04-01被删除"
+    )
     # PCA
     from sklearn.decomposition import PCA
     from sklearn.model_selection import train_test_split

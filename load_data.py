@@ -25,6 +25,7 @@ Functions:
     - send_email_to_zhangtao() :  给我发邮件
     - Transforming_raw_xlsx_data_into_trainable_csv_data 把原始的采集的数据转成dataframe
     - save_dict_to_csv(data, csv_file, fill_value=None)
+    - get_wavelength_list  
 
 ---------
 Examples:
@@ -49,6 +50,7 @@ Examples:
 '''
 
 # wavelengths = pd.read_csv(r"C:\Users\zata\AppData\Local\Programs\Python\Python310\Lib\site-packages\nirapi\Alcohol.csv").columns[:1899].values.astype("float")
+import pickle
 from typing import Union
 import pandas as pd
 import numpy as np
@@ -73,9 +75,300 @@ else:
     GUANGYIN_DATABASE_IP: str = '47.121.138.184'
     GUANGYIN_DATABASE_PORT: int = 1001
 
+## 数据库连接设置
+MYSQL_HOST = GUANGYIN_DATABASE_IP
+MYSQL_PORT = GUANGYIN_DATABASE_PORT
+MYSQL_USER = 'root'
+MYSQL_PASSWORD = 'Guangyin88888888@'
+
 #############################################################################################################################################################################################
 ######################################################   数据库的相关操作
 #############################################################################################################################################################################################
+
+
+def transform_xlsx_to_mysql(file_path ,machine_type = "卷积式_v1" ,upload_database = False,**kw):
+    """把样机xlsx文件上传到mysql数据库
+    
+    """
+    ## if progress_bar is not None, then show progress bar
+    progress_bar =  kw.get("progress_bar",None)
+    if progress_bar is not None:
+        progress_bar.start()
+
+
+
+    ## sheet of Sample Info
+    Sample_Info = pd.read_excel(file_path,sheet_name="Sample Info")
+    file_name = Sample_Info["file_name"]
+    created_time = Sample_Info["created_time"]
+    volunteer = Sample_Info["volunteer"] if "volunteer" in Sample_Info.columns else []
+    project_type = Sample_Info["project_type"] if "project_type" in Sample_Info.columns else []
+    project_name = Sample_Info["project_name"] if "project_name" in Sample_Info.columns else []
+    collect_site = Sample_Info["collect_site"] if "collect_site" in Sample_Info.columns else []
+
+    ## sheet of PD Sample
+    pd_sample = pd.read_excel(file_path,sheet_name="PD Sample")
+    
+    ## sheet of PD Source
+    pd_source = pd.read_excel(file_path,sheet_name="PD Source")
+
+    ## sheet of PD Background
+    pd_background = pd.read_excel(file_path,sheet_name="PD BG")
+    if pd_background.shape[0] == 0:
+        pd_background = pd.DataFrame(None, index=range(pd_sample.shape[0]), columns=pd_sample.columns)
+
+    ## sheet of Spectrum Sample
+    spectrum_sample = pd.read_excel(file_path,sheet_name="Recon Sample")
+    if spectrum_sample.shape[0] == 0:
+        spectrum_sample = pd.DataFrame(None, index=range(pd_sample.shape[0]), columns=pd_sample.columns)
+
+    ## sheet of Spectrum Source
+    spectrum_source = pd.read_excel(file_path,sheet_name="Recon Source")
+    if spectrum_source.shape[0] == 0:
+        spectrum_source = pd.DataFrame(None, index=range(pd_sample.shape[0]), columns=pd_sample.columns)
+
+    ## sheet of Spectrum Corrected
+    spectrum_corrected = pd.read_excel(file_path,sheet_name="Corrected spectrum")
+    if spectrum_corrected.shape[0] == 0:
+        spectrum_corrected = pd.DataFrame(None, index=range(pd_sample.shape[0]), columns=pd_sample.columns)
+    
+    biomarks = pd.read_excel(file_path,sheet_name="Measured_Value")
+
+    print(file_name.shape,created_time.shape,volunteer.shape,project_type.shape,project_name.shape,collect_site.shape,pd_sample.shape,pd_source.shape,pd_background.shape,spectrum_sample.shape,spectrum_source.shape,spectrum_corrected.shape,biomarks.shape)
+
+
+
+    # Create DataFrame with file_name and created_time
+    df = pd.DataFrame({
+        'file_name': file_name,
+        'created_time': created_time,
+        'volunteer': volunteer,
+        'project_type': project_type,
+        'project_name': project_name,
+        'collect_site': collect_site,
+        'pd_sample': [row.tolist() for _, row in pd_sample.iterrows()],
+        'pd_source': [row.tolist() for _, row in pd_source.iterrows()],
+        'pd_background': [row.tolist() for _, row in pd_background.iterrows()],
+        'spectrum_sample': [row.tolist() for _, row in spectrum_sample.iterrows()],
+        'spectrum_source': [row.tolist() for _, row in spectrum_source.iterrows()],
+        'spectrum_corrected': [row.tolist() for _, row in spectrum_corrected.iterrows()],
+        'biomarks': [row.to_dict() for _, row in biomarks.iterrows()]
+    })
+    if upload_database:
+        connection = pymysql.connect(
+            host=MYSQL_HOST,
+            port=MYSQL_PORT,
+            user=MYSQL_USER,
+            password=MYSQL_PASSWORD,
+            database='样机',
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor
+        )
+        if progress_bar:
+            progress_bar["maximum"] = len(df)+1
+
+        for i in tqdm(range(len(df))):
+            if progress_bar:
+                progress_bar["value"] = i + 1
+                progress_bar.update_idletasks()
+                progress_bar.update()
+            # 建立游标
+            with connection.cursor() as cursor:
+
+                if 1:
+                    # 创建 SQL 插入语句
+                    sql = f"""
+                INSERT INTO {machine_type}(
+                     file_name, created_time, volunteer, project_type, 
+                    project_name, collect_site, pd_sample, pd_source, pd_background, 
+                    spectrum_sample, spectrum_source, spectrum_corrected, biomarks,data_generation_time_in_database
+                )
+                VALUES (
+                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                """
+                    insert_data =  (
+                            df.iloc[i]["file_name"],
+                            df.iloc[i]["created_time"],
+                            None if pd.isna(df.iloc[i]["volunteer"]) else df.iloc[i]["volunteer"],
+                            None if pd.isna(df.iloc[i]["project_type"]) else df.iloc[i]["project_type"],
+                            None if pd.isna(df.iloc[i]["project_name"]) else df.iloc[i]["project_name"],
+                            None if pd.isna(df.iloc[i]["collect_site"]) else df.iloc[i]["collect_site"],
+                            json.dumps(df.iloc[i]["pd_sample"],ensure_ascii=False),
+                            json.dumps(df.iloc[i]["pd_source"],ensure_ascii=False),
+                            json.dumps(df.iloc[i]["pd_background"],ensure_ascii=False),
+                            json.dumps(df.iloc[i]["spectrum_sample"],ensure_ascii=False),
+                            json.dumps(df.iloc[i]["spectrum_source"],ensure_ascii=False),
+                            json.dumps(df.iloc[i]["spectrum_corrected"],ensure_ascii=False),
+                            json.dumps(df.iloc[i]["biomarks"],ensure_ascii=False),
+                            datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        )
+                    
+
+                    cursor.execute(sql, insert_data)
+
+                # 执行 SQL 插入操作
+                
+                # 提交事务
+                connection.commit()
+        connection.close()
+        if kw.get("progress_bar",None):
+            progress_bar.stop()
+        return True
+    
+    return df
+
+
+def transform_xlsx_to_database(file_path ,machine_type = "样机_卷积式_v1" ,upload_database = False,**kw):
+    """把样机xlsx文件上传到mysql数据库
+    
+    """
+    ## if progress_bar is not None, then show progress bar
+    if kw.get("progress_bar",None):
+        progress_bar = kw["progress_bar"]
+        progress_bar.start()
+
+
+    ## sheet of Sample Info
+    Sample_Info = pd.read_excel(file_path,sheet_name="Sample Info")
+    file_name = Sample_Info["file_name"]
+    created_time = Sample_Info["created_time"]
+    volunteer = Sample_Info["volunteer"] if "volunteer" in Sample_Info.columns else []
+    project_type = Sample_Info["project_type"] if "project_type" in Sample_Info.columns else []
+    project_name = Sample_Info["project_name"] if "project_name" in Sample_Info.columns else []
+    collect_site = Sample_Info["collect_site"] if "collect_site" in Sample_Info.columns else []
+
+    ## sheet of PD Sample
+    pd_sample = pd.read_excel(file_path,sheet_name="PD Sample")
+    
+    ## sheet of PD Source
+    pd_source = pd.read_excel(file_path,sheet_name="PD Source")
+
+    ## sheet of PD Background
+    pd_background = pd.read_excel(file_path,sheet_name="PD BG")
+    if pd_background.shape[0] == 0:
+        pd_background = pd.DataFrame(None, index=range(pd_sample.shape[0]), columns=pd_sample.columns)
+
+
+
+
+    ## sheet of Spectrum Sample
+    spectrum_sample = pd.read_excel(file_path,sheet_name="Recon Sample")
+    if spectrum_sample.shape[0] == 0:
+        spectrum_sample = pd.DataFrame(None, index=range(pd_sample.shape[0]), columns=pd_sample.columns)
+
+    ## sheet of Spectrum Source
+    spectrum_source = pd.read_excel(file_path,sheet_name="Recon Source")
+    if spectrum_source.shape[0] == 0:
+        spectrum_source = pd.DataFrame(None, index=range(pd_sample.shape[0]), columns=pd_sample.columns)
+
+    ## sheet of Spectrum Corrected
+    spectrum_corrected = pd.read_excel(file_path,sheet_name="Corrected spectrum")
+    if spectrum_corrected.shape[0] == 0:
+        spectrum_corrected = pd.DataFrame(None, index=range(pd_sample.shape[0]), columns=pd_sample.columns)
+    
+    biomarks = pd.read_excel(file_path,sheet_name="Measured_Value")
+
+    print(file_name.shape,created_time.shape,volunteer.shape,project_type.shape,project_name.shape,collect_site.shape,pd_sample.shape,pd_source.shape,pd_background.shape,spectrum_sample.shape,spectrum_source.shape,spectrum_corrected.shape,biomarks.shape)
+
+
+
+    # Create DataFrame with file_name and created_time
+    df = pd.DataFrame({
+        'file_name': file_name,
+        'created_time': created_time,
+        'volunteer': volunteer,
+        'project_type': project_type,
+        'project_name': project_name,
+        'collect_site': collect_site,
+        'pd_sample': [row.tolist() for _, row in pd_sample.iterrows()],
+        'pd_source': [row.tolist() for _, row in pd_source.iterrows()],
+        'pd_background': [row.tolist() for _, row in pd_background.iterrows()],
+        'spectrum_sample': [row.tolist() for _, row in spectrum_sample.iterrows()],
+        'spectrum_source': [row.tolist() for _, row in spectrum_source.iterrows()],
+        'spectrum_corrected': [row.tolist() for _, row in spectrum_corrected.iterrows()],
+        'biomarks': [row.to_dict() for _, row in biomarks.iterrows()]
+    })
+    if upload_database:
+        connection = pymysql.connect(
+            host=MYSQL_HOST,
+            port=MYSQL_PORT,
+            user=MYSQL_USER,
+            password=MYSQL_PASSWORD,
+            database=MYSQL_DATABASE,
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor
+        )
+
+        progress_bar["maximum"] = len(df)+1
+
+        for i in tqdm(range(len(df))):
+            progress_bar["value"] = i + 1
+            progress_bar.update_idletasks()
+            progress_bar.update()
+            # 建立游标
+            with connection.cursor() as cursor:
+
+                if 1:
+                    # 创建 SQL 插入语句
+                    sql = f"""
+                INSERT INTO {machine_type}(
+                     file_name, created_time, volunteer, project_type, 
+                    project_name, collect_site, pd_sample, pd_source, pd_background, 
+                    spectrum_sample, spectrum_source, spectrum_corrected, biomarks,data_generation_time_in_database
+                )
+                VALUES (
+                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                """
+                
+                    insert_data =  (
+                            df.iloc[i]["file_name"],
+                            df.iloc[i]["created_time"],
+                            None if pd.isna(df.iloc[i]["volunteer"]) else df.iloc[i]["volunteer"],
+                            None if pd.isna(df.iloc[i]["project_type"]) else df.iloc[i]["project_type"],
+                            None if pd.isna(df.iloc[i]["project_name"]) else df.iloc[i]["project_name"],
+                            None if pd.isna(df.iloc[i]["collect_site"]) else df.iloc[i]["collect_site"],
+                            json.dumps(df.iloc[i]["pd_sample"],ensure_ascii=False),
+                            json.dumps(df.iloc[i]["pd_source"],ensure_ascii=False),
+                            json.dumps(df.iloc[i]["pd_background"],ensure_ascii=False),
+                            json.dumps(df.iloc[i]["spectrum_sample"],ensure_ascii=False),
+                            json.dumps(df.iloc[i]["spectrum_source"],ensure_ascii=False),
+                            json.dumps(df.iloc[i]["spectrum_corrected"],ensure_ascii=False),
+                            json.dumps(df.iloc[i]["biomarks"],ensure_ascii=False),
+                            datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        )
+                    
+
+                    cursor.execute(sql, insert_data)
+
+                # 执行 SQL 插入操作
+                
+                # 提交事务
+                connection.commit()
+        connection.close()
+        if kw.get("progress_bar",None):
+            progress_bar.stop()
+        return True
+    
+    return df
+    
+
+
+
+def get_wavelength_list(mechine_type:str = "FT光谱仪"):
+    wavelength_dict_path =  os.path.join(os.path.dirname(__file__), "wavelength_dict.pkl")
+
+    import pickle
+    with open(wavelength_dict_path, "rb") as file:
+        wavelength_dict = pickle.load(file)
+
+    if mechine_type == "FT":
+        return wavelength_dict['FT']
+    if mechine_type == "FX":
+        return wavelength_dict['FX']
+
+
 
 def get_dataset_by_indices(dataset, indices):
     """ first create in 12-19
@@ -420,7 +713,7 @@ def insert_spectrum_data_to_mysql(table_name:str,光谱:list,项目名称:str,�
 def get_dataset_from_mysql(table_name:str, project_name:str, X_type:list, y_type:list=None,  start_time:str="1970-01-01 00:00:00", end_time:str="2100-01-01 00:00:00",volunteer:str=None,database='样机数据库'):
     '''
     example:
-        dataset_X,dataset_y = get_dataset_from_mysql(database='光谱数据库',table_name="复享光谱仪", project_name="多发光单收光探头血糖数据", X_type=['光谱',"采集日期","志愿者"], )
+        dataset_X = get_dataset_from_mysql(database='光谱数据库',table_name="复享光谱仪", project_name="多发光单收光探头血糖数据", X_type=['光谱',"采集日期","志愿者"], )
 
     '''
     if volunteer is None:

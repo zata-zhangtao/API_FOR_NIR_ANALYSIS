@@ -419,11 +419,15 @@ class SpectrumTransformerByNN(BaseEstimator, TransformerMixin):
 
 
 
-class conv_MatMul_recom(BaseEstimator,TransformerMixin):
+class conv_MatMul_recon(BaseEstimator,TransformerMixin):
+    """直接乘以传输矩阵得到所谓的恢复光谱，然后样品除以光源光谱 
+    效果似乎不好
 
-    """这玩意不行,只能手工去调
+    
     """
-    S21 = pd.read_csv("S21_6波段.csv").values
+    current_file_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    S21 = pd.read_csv( os.path.join(current_file_dir, "S21_6波段.csv")).values
     wavelength_merged = np.linspace(1245,1750,1200)
     band_point_num = 200
     def __int__(self):
@@ -431,6 +435,13 @@ class conv_MatMul_recom(BaseEstimator,TransformerMixin):
     def fit(self):
         pass
     def transform(self,pd_sample,pd_source):
+        """ pd维度为(n_sample,1200)或者(1200)
+        
+        """
+
+            
+
+
         def rec(PD):
             rec_PD_list = []
             for i in range(self.S21.shape[1]):
@@ -442,11 +453,24 @@ class conv_MatMul_recom(BaseEstimator,TransformerMixin):
                 pd = PD[i*self.band_point_num:(i+1)*self.band_point_num]
                 rec_PD_list.append(np.dot(pd.reshape(1,200),np.linalg.inv(s21_m)).reshape(-1))
             return np.concatenate(rec_PD_list)
+        
+
+        if pd_sample.ndim == 2:
+            rec_pd_sample_list = []
+            rec_pd_source_list = []
+            for i in range(pd_sample.shape[0]):
+                # rec_list.append(rec(pd_sample[i])*20/rec(pd_source[i]))
+                rec_pd_sample_list.append(rec(pd_sample[i]))
+                rec_pd_source_list.append(rec(pd_source[i]))
+            return np.array(rec_pd_sample_list),np.array(rec_pd_source_list)
+                
+
         rec_PD_sample_list = rec(pd_sample)
         rec_PD_source_list = rec(pd_source)
-        print(rec_PD_sample_list.shape)
-        print(rec_PD_sample_list)
-        return rec_PD_sample_list*20/rec_PD_source_list
+        # print(rec_PD_sample_list.shape)
+        # print(rec_PD_sample_list)
+        # return rec_PD_sample_list*20/rec_PD_source_list
+        return rec_PD_sample_list,rec_PD_source_list
 
         
 
@@ -456,7 +480,11 @@ class conv_MatMul_recom(BaseEstimator,TransformerMixin):
 
 class conv_DFT_recon(BaseEstimator,TransformerMixin):
     S21_lp_nums = [1, 1, 1, 1, 1, 1]
-    S21 = pd.read_csv("S21_6波段.csv").values
+
+    current_file_dir = os.path.dirname(os.path.abspath(__file__))
+    print(current_file_dir)
+    
+    S21 = pd.read_csv( os.path.join(current_file_dir, "S21_6波段.csv")).values
     shifter =[110, 87, 80, 110, 95, 100]
     band_point_num = 200
     wavelength = [
@@ -498,9 +526,19 @@ class conv_DFT_recon(BaseEstimator,TransformerMixin):
                 recon = np.roll(recon, self.shifter[i])
                 rec_PD_list.append(recon)
             return np.concatenate(rec_PD_list)
+        
+        if pd_sample.ndim == 2:
+            rec_pd_sample_list = []
+            rec_pd_source_list = []
+            for i in range(pd_sample.shape[0]):
+                # rec_list.append(rec(pd_sample[i])*20/rec(pd_source[i]))
+                rec_pd_sample_list.append(rec(pd_sample[i]))
+                rec_pd_source_list.append(rec(pd_source[i]))
+            return np.array(rec_pd_sample_list),np.array(rec_pd_source_list)
         rec_PD_sample_list = rec(pd_sample)
         rec_PD_source_list = rec(pd_source)
-        return rec_PD_sample_list/rec_PD_source_list
+        # return rec_PD_sample_list/rec_PD_source_list
+        return rec_PD_sample_list,rec_PD_source_list
 
     def fit_transform(self,pd_sample,pd_source):
         return self.transform(pd_sample,pd_source)
@@ -598,27 +636,689 @@ class conv_DFT_recon(BaseEstimator,TransformerMixin):
 
 
 
-class conv_multi_rec_func_merge(BaseEstimator,TransformerMixin):
+class FermentPeelVectorReLU(BaseEstimator,TransformerMixin):
+    """先用字典学习学到一个字典，然后再用一个可学习的向量去学习在字典之上其他光谱的变换规律，注意是向量
+    """
     rec_dic_class =  SpectralDictionaryMapper()
     rec_dft_class = conv_DFT_recon()
     wavelength_merged = np.linspace(1245,1750,1200)
 
-    def __init__(self):
-        pass
-
-    def fit(self,pd_samples,ft_spectra):
-        self.rec_dic_class.fit(pd_samples,ft_spectra)
-    def transform(self,pd_sample,pd_source):
-        # rec_dic = self.rec_dic_class.transform(pd_sample)
+    def __init__(self, W=None, enable_dic=True, enable_dft=True, dic_params=None, dft_params=None):
+        # Initialize W as a learnable parameter matrix
+        if W is None :
+            self.W = None
+        else:
+            self.W = W 
+            
+        # Initialize optimizer
+        self.optimizer = torch.optim.Adam([self.W]) if self.W is not None else None
+        self.enable_dic = enable_dic
+        self.enable_dft = enable_dft
         
-        rec_dic = 0
-        rec_dft = self.rec_dft_class.transform_cut_inter_smooth(pd_sample,pd_source)
-        # 需要修改这里的W
-        W = 1
-        return rec_dic + rec_dft*W 
+        # Initialize sub-transformers
+        self.dic_params = dic_params  # Store as attribute
+        self.dft_params = dft_params  # Store as attribute
+        self.rec_dic_class = SpectralDictionaryMapper(**(dic_params or {}))
+        self.rec_dft_class = conv_DFT_recon(**(dft_params or {}))
+        # self.rec_dic_class = SpectralDictionaryMapper(**(dic_params or {}))
+        # self.rec_dft_class = conv_DFT_recon(**(dft_params or {}))
+        
+        # Merged wavelength range
+
+
+        
+    def fit(self, pd_samples, ft_spectra,epochs=100):
+        """
+        Fit the transformer to the training data.
+        
+        Parameters
+        ----------
+        pd_samples : array-like of shape (n_samples, n_features_proto)
+            The prototype spectral data.
+        ft_spectra : array-like of shape (n_samples, n_features_ft)
+            The FT spectral data.
+            
+        Returns
+        -------
+        self : object
+            Returns the instance itself.
+        """
+
+        # Convert data to tensors
+        pd_samples = torch.tensor(pd_samples, dtype=torch.float32)
+        ft_spectra = torch.tensor(ft_spectra, dtype=torch.float32)
+
+
+        # Get dimensions
+        n_samples, n_features_proto = pd_samples.shape
+        n_features_ft = ft_spectra.shape[1]
+        self.n_features_ft = n_features_ft
+        from scipy.interpolate import interp1d
+        # Interpolate pd_samples to match ft_spectra feature size
+        pd_samples_interp = np.zeros((n_samples, n_features_ft))
+        for i in range(n_samples):
+            # Create interpolation function
+            x_old = np.linspace(0, 1, n_features_proto)
+            x_new = np.linspace(0, 1, n_features_ft)
+            interp_func = interp1d(x_old, pd_samples[i], kind='linear')
+            pd_samples_interp[i] = interp_func(x_new)
+        
+        # Convert interpolated data back to tensor
+        pd_samples_interp = torch.tensor(pd_samples_interp, dtype=torch.float32)
+
+
+        pd_samples = pd_samples_interp
+
+
+        # Add a constant vector to pd_samples (假设常数向量为可学习的参数)
+        if not hasattr(self, 'bias'):
+            self.bias = torch.nn.Parameter(torch.zeros(pd_samples.shape[1], requires_grad=True))
+        # pd_samples_adjusted = pd_samples + self.bias  # 每个样本加上同一个常数向量
+            
+        if self.enable_dic:
+            self.rec_dic_class.fit(pd_samples, ft_spectra)
+
+        # Initialize W as a learnable parameter matrix
+        if self.W is None:
+            # self.W = torch.nn.Parameter(torch.randn(pd_samples.shape[1], ft_spectra.shape[1], requires_grad=True))
+            self.W = torch.nn.Parameter(torch.ones(ft_spectra.shape[1], requires_grad=True))
+        else:
+            self.W = self.W 
+            
+        # Initialize optimizer
+        self.optimizer = torch.optim.Adam([self.W]) if self.W is not None else None
+        # if self.enable_dft:
+        #     self.rec_dft_class.fit()  # Assuming DFT recon doesn't need fitting
+        
+        
+        
+        # Training loop for W
+        for epoch in range(epochs):
+
+
+            for i in range(pd_samples.shape[0]):
+                self.optimizer.zero_grad()
+                
+
+                # Forward pass
+                pd_samples_i = pd_samples[i].unsqueeze(0)
+                pd_sample_i = pd_samples_i+self.bias  # 使用调整后的样本
+
+
+                
+                # Forward pass
+                rec_dic = self.rec_dic_class.transform(pd_samples_i).squeeze(0) if self.enable_dic else 0
+                # rec_dft = self.rec_dft_class.transform_cut_inter_smooth(pd_samples, pd_samples)
+                if isinstance(rec_dic, np.ndarray):  # Check if rec_dic is a NumPy array
+                    rec_dic = torch.tensor(rec_dic, dtype=torch.float32)
+                elif rec_dic == 0:  # Handle the case when enable_dic is False
+                    rec_dic = torch.zeros_like(ft_spectra[i])
+                # Apply W as a linear transformation
+                # reconstructed = rec_dic + torch.matmul(pd_samples[i].unsqueeze(0), self.W)
+                
+                reconstructed = rec_dic + pd_samples[i] * self.W
+
+                reconstructed = torch.relu(reconstructed)
+                # Calculate loss (mean squared error)
+                loss = torch.mean((reconstructed - ft_spectra[i]) ** 2)
+                
+                # Backward pass and optimize
+                loss.backward()
+                self.optimizer.step()
+
+        return self
+        
+
+    def transform(self, pd_sample):
+        """
+        Transform the input data using the fitted transformer.
+        
+        Parameters
+        ----------
+        pd_sample : array-like of shape ( n_features_proto)
+            The prototype spectral data to transform.
+
+            
+        Returns
+        -------
+        reconstructed_data : array-like of shape (n_samples, n_features_ft)
+            The reconstructed FT spectral data.
+        """
+
+        # pd_sample = torch.tensor(pd_sample, dtype=torch.float32)
+        # pd_source = torch.tensor(pd_source, dtype=torch.float32)
+
+
+        def rec(pd_sample):
+            rec_dic = 0
+            n_features_proto = pd_sample.shape[0]
+            n_features_ft = self.n_features_ft
+            from scipy.interpolate import interp1d
+            # Interpolate pd_samples to match ft_spectra feature size
+            x_old = np.linspace(0, 1, n_features_proto)
+            x_new = np.linspace(0, 1, n_features_ft)
+            interp_func = interp1d(x_old, pd_sample, kind='linear')
+            pd_sample_interp = interp_func(x_new)
+            # Convert interpolated data back to tensor
+            pd_sample = torch.tensor(pd_sample_interp, dtype=torch.float32)
+            if self.enable_dic:
+                rec_dic = self.rec_dic_class.transform(pd_sample.unsqueeze(0))
+            # if self.enable_dft:
+            #     rec_dft = self.rec_dft_class.transform_cut_inter_smooth(pd_sample, pd_source)
+            
+            # Combine results with weights
+            if isinstance(rec_dic, np.ndarray):  # Check if rec_dic is a NumPy array
+                rec_dic = torch.tensor(rec_dic, dtype=torch.float32)
+
+            # reconstructed_data = rec_dic + torch.matmul(pd_sample.unsqueeze(0), self.W)
+            reconstructed_data = rec_dic + pd_sample.unsqueeze(0) * self.W
+            return reconstructed_data.detach().numpy()
+
+        if pd_sample.ndim == 2:
+            rec_pd_sample_list = []
+            for i in range(pd_sample.shape[0]):
+                # rec_list.append(rec(pd_sample[i])*20/rec(pd_source[i]))
+                rec_pd_sample_list.append(rec(pd_sample[i]))
+            return np.array(rec_pd_sample_list)
+        return rec(pd_sample)
+
+
+
+    def fit_transform(self, pd_samples, ft_spectra, pd_sample):
+        """
+        Fit to data, then transform it.
+        
+        Parameters
+        ----------
+        pd_samples : array-like of shape (n_samples, n_features_proto)
+            The prototype spectral data.
+        ft_spectra : array-like of shape (n_samples, n_features_ft)
+            The FT spectral data.
+        pd_sample : array-like of shape (n_samples, n_features_proto)
+            The prototype spectral data to transform.
+        pd_source : array-like of shape (n_samples, n_features_proto)
+            The source prototype spectral data.
+            
+        Returns
+        -------
+        reconstructed_data : array-like of shape (n_samples, n_features_ft)
+            The reconstructed FT spectral data.
+        """
+        self.fit(pd_samples, ft_spectra)
+        return self.transform(pd_sample, pd_source)
+
+    def save_model(self, filepath):
+        """
+        Save the model parameters to a file.
+        
+        Parameters
+        ----------
+        filepath : str
+            The file path to save the model.
+        """
+        model_state = {
+            'W': self.W,
+            'enable_dic': self.enable_dic,
+            'enable_dft': self.enable_dft,
+            'rec_dic_class': self.rec_dic_class,
+            'rec_dft_class': self.rec_dft_class
+        }
+        torch.save(model_state, filepath)
+    
+    def load_model(self, filepath):
+        """
+        Load the model parameters from a file.
+        
+        Parameters
+        ----------
+        filepath : str
+            The file path to load the model from.
+        """
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Model file not found: {filepath}")
+        
+        model_state = torch.load(filepath)
+        self.W = model_state['W']
+        self.enable_dic = model_state['enable_dic']
+        self.enable_dft = model_state['enable_dft']
+        self.rec_dic_class = model_state['rec_dic_class']
+        self.rec_dft_class = model_state['rec_dft_class']
+
+
+class conv_FullDictDotMat(BaseEstimator,TransformerMixin):
+    rec_dic_class = SpectralDictionaryMapper()
+    rec_dft_class = conv_DFT_recon()
+    wavelength_merged = np.linspace(1245,1750,1200)
+
+    def __init__(self, W=None, enable_dic=True, enable_dft=True, dic_params=None, dft_params=None):
+        # Initialize W as a learnable parameter matrix
+        if W is None :
+            self.W = None
+        else:
+            self.W = W 
+            
+        # Initialize optimizer
+        self.optimizer = torch.optim.Adam([self.W]) if self.W is not None else None
+        self.enable_dic = enable_dic
+        self.enable_dft = enable_dft
+        
+        # Initialize sub-transformers
+        self.dic_params = dic_params  # Store as attribute
+        self.dft_params = dft_params  # Store as attribute
+        self.rec_dic_class = SpectralDictionaryMapper(**(dic_params or {}))
+        self.rec_dft_class = conv_DFT_recon(**(dft_params or {}))
+        # self.rec_dic_class = SpectralDictionaryMapper(**(dic_params or {}))
+        # self.rec_dft_class = conv_DFT_recon(**(dft_params or {}))
+        
+        # Merged wavelength range
+
+
+        
+    def fit(self, pd_samples, ft_spectra,epochs=100):
+        """
+        Fit the transformer to the training data.
+        
+        Parameters
+        ----------
+        pd_samples : array-like of shape (n_samples, n_features_proto)
+            The prototype spectral data.
+        ft_spectra : array-like of shape (n_samples, n_features_ft)
+            The FT spectral data.
+            
+        Returns
+        -------
+        self : object
+            Returns the instance itself.
+        """
+
+        # Convert data to tensors
+        pd_samples = torch.tensor(pd_samples, dtype=torch.float32)
+        ft_spectra = torch.tensor(ft_spectra, dtype=torch.float32)
+
+
+            
+        if self.enable_dic:
+            self.rec_dic_class.fit(pd_samples, ft_spectra)
+
+        # Initialize W as a learnable parameter matrix
+        if self.W is None:
+            self.W = torch.nn.Parameter(torch.randn(pd_samples.shape[1], ft_spectra.shape[1], requires_grad=True))
+        else:
+            self.W = self.W 
+            
+        # Initialize optimizer
+        self.optimizer = torch.optim.Adam([self.W]) if self.W is not None else None
+
+        
+        
+        
+        # Training loop for W
+        for epoch in range(epochs):
+
+
+            for i in range(pd_samples.shape[0]):
+                self.optimizer.zero_grad()
+                
+
+                # Forward pass
+                pd_samples_i = pd_samples[i].unsqueeze(0)
+
+
+                
+                # Forward pass
+                rec_dic = self.rec_dic_class.transform(pd_samples_i).squeeze(0) if self.enable_dic else 0
+                if isinstance(rec_dic, np.ndarray):  # Check if rec_dic is a NumPy array
+                    rec_dic = torch.tensor(rec_dic, dtype=torch.float32)
+                elif rec_dic == 0:  # Handle the case when enable_dic is False
+                    rec_dic = torch.zeros_like(ft_spectra[i])
+                # Apply W as a linear transformation
+                reconstructed = rec_dic + torch.matmul(pd_samples[i].unsqueeze(0), self.W)
+
+                # Calculate loss (mean squared error)
+                loss = torch.mean((reconstructed - ft_spectra[i]) ** 2)
+                
+                # Backward pass and optimize
+                loss.backward()
+                self.optimizer.step()
+
+        return self
+        
+
+    def transform(self, pd_sample):
+        """
+        Transform the input data using the fitted transformer.
+        
+        Parameters
+        ----------
+        pd_sample : array-like of shape (n_samples, n_features_proto)
+            The prototype spectral data to transform.
+        pd_source : array-like of shape (n_samples, n_features_proto)
+            The source prototype spectral data.
+            
+        Returns
+        -------
+        reconstructed_data : array-like of shape (n_samples, n_features_ft)
+            The reconstructed FT spectral data.
+        """
+
+        def rec(pd_sample):
+            rec_dic = 0
+            pd_sample = torch.tensor(pd_sample, dtype=torch.float32)
+            # pd_source = torch.tensor(pd_source, dtype=torch.float32)
+            
+            if self.enable_dic:
+                rec_dic = self.rec_dic_class.transform(pd_sample.unsqueeze(0))
+            # Combine results with weights
+            if isinstance(rec_dic, np.ndarray):  # Check if rec_dic is a NumPy array
+                rec_dic = torch.tensor(rec_dic, dtype=torch.float32)
+
+
+            reconstructed_data = rec_dic + torch.matmul(pd_sample.unsqueeze(0), self.W)
+            return reconstructed_data.detach().numpy().reshape(-1)
+        if pd_sample.ndim == 2:
+            rec_pd_sample_list = []
+            for i in range(pd_sample.shape[0]):
+                rec_pd_sample_list.append(rec(pd_sample[i]))
+            return np.array(rec_pd_sample_list)
+        return rec(pd_sample)
+    
+    def fit_transform(self, pd_samples, ft_spectra, pd_sample):
+        """
+        Fit to data, then transform it.
+        
+        Parameters
+        ----------
+        pd_samples : array-like of shape (n_samples, n_features_proto)
+            The prototype spectral data.
+        ft_spectra : array-like of shape (n_samples, n_features_ft)
+            The FT spectral data.
+        pd_sample : array-like of shape (n_samples, n_features_proto)
+            The prototype spectral data to transform.
+        pd_source : array-like of shape (n_samples, n_features_proto)
+            The source prototype spectral data.
+            
+        Returns
+        -------
+        reconstructed_data : array-like of shape (n_samples, n_features_ft)
+            The reconstructed FT spectral data.
+        """
+        self.fit(pd_samples, ft_spectra)
+        return self.transform(pd_sample, pd_source)
+
+    def save_model(self, filepath):
+        """
+        Save the model parameters to a file.
+        
+        Parameters
+        ----------
+        filepath : str
+            The file path to save the model.
+        """
+        model_state = {
+            'W': self.W,
+            'enable_dic': self.enable_dic,
+            'enable_dft': self.enable_dft,
+            'rec_dic_class': self.rec_dic_class,
+            'rec_dft_class': self.rec_dft_class
+        }
+        torch.save(model_state, filepath)
+    
+    def load_model(self, filepath):
+        """
+        Load the model parameters from a file.
+        
+        Parameters
+        ----------
+        filepath : str
+            The file path to load the model from.
+        """
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Model file not found: {filepath}")
+        
+        model_state = torch.load(filepath)
+        self.W = model_state['W']
+        self.enable_dic = model_state['enable_dic']
+        self.enable_dft = model_state['enable_dft']
+        self.rec_dic_class = model_state['rec_dic_class']
+        self.rec_dft_class = model_state['rec_dft_class']
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import mean_squared_error, r2_score
+import pandas as pd
+from datetime import datetime
+import os
+
+
+
+class SpectrumModelEvaluator:
+    def __init__(self, output_dir="evaluation_results"):
+        """
+        Initialize the evaluator with an output directory for saving results
+        
+        Parameters:
+        -----------
+        output_dir : str
+            Directory where plots and summary document will be saved
+        """
+        self.output_dir = output_dir
+        self.models = {}
+        self.results = {}
+        
+        # Create output directory if it doesn't exist
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            
+    def register_models(self):
+        """Register all available models with default parameters"""
+        self.models = {
+            'SpectralDictionary': SpectralDictionaryMapper(),
+            'SpectrumTransformerNN': SpectrumTransformerByNN(),
+            # 'ConvMatMul': conv_MatMul_recon(),  # Requires source data
+            'ConvDFT': conv_DFT_recon(),
+            'FermentPeelVector': FermentPeelVectorReLU(),
+            'ConvFullDict': conv_FullDictDotMat()
+        }
+        
+    def evaluate_models(self, X_train, y_train, X_test, y_test=None):
+        """
+        Evaluate all registered models on the provided data
+        
+        Parameters:
+        -----------
+        X_train : array-like
+            Training prototype spectral data
+        y_train : array-like
+            Training FT spectral data
+        X_test : array-like
+            Testing prototype spectral data
+        y_test : array-like, optional
+            Testing FT spectral data (if available)
+        """
+        self.register_models()
+        self.results = {}
+        
+        for name, model in self.models.items():
+            try:
+                print(f"Evaluating {name}...")
+                
+                # Fit the model
+                if name in ['ConvMatMul', 'ConvDFT']:
+                    # These models require source data, we'll skip them for now
+                    continue
+                else:
+                    model.fit(X_train, y_train)
+                
+                # Predict on test set
+                y_pred = model.transform(X_test)
+                
+                # Calculate metrics if y_test is provided
+                if y_test is not None:
+                    mse = mean_squared_error(y_test, y_pred)
+                    r2 = r2_score(y_test, y_pred)
+                    self.results[name] = {
+                        'model': model,
+                        'y_pred': y_pred,
+                        'mse': mse,
+                        'r2': r2
+                    }
+                else:
+                    self.results[name] = {
+                        'model': model,
+                        'y_pred': y_pred
+                    }
+                
+            except Exception as e:
+                print(f"Error evaluating {name}: {str(e)}")
+                
+    def generate_plots(self, X_test, y_test=None):
+        """Generate comparison plots for all evaluated models"""
+        plt.figure(figsize=(15, 10))
+        
+        if y_test is not None:
+            # Plot 1: MSE Comparison
+            plt.subplot(2, 1, 1)
+            model_names = list(self.results.keys())
+            mses = [self.results[name]['mse'] for name in model_names]
+            plt.bar(model_names, mses)
+            plt.title('Mean Squared Error Comparison')
+            plt.ylabel('MSE')
+            plt.xticks(rotation=45)
+            
+            # Plot 2: R2 Score Comparison
+            plt.subplot(2, 1, 2)
+            r2s = [self.results[name]['r2'] for name in model_names]
+            plt.bar(model_names, r2s)
+            plt.title('R2 Score Comparison')
+            plt.ylabel('R2 Score')
+            plt.xticks(rotation=45)
+            
+            plt.tight_layout()
+            plot_path = os.path.join(self.output_dir, f'model_comparison_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png')
+            plt.savefig(plot_path)
+            plt.close()
+            
+            # Generate prediction vs actual plots
+            for name in self.results:
+                plt.figure(figsize=(10, 6))
+                plt.plot(self.results[name]['y_pred'][0], label='Predicted')
+                plt.plot(y_test[0], label='Actual')
+                plt.title(f'{name} - Predicted vs Actual Spectrum')
+                plt.legend()
+                plt_path = os.path.join(self.output_dir, f'{name}_prediction_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png')
+                plt.savefig(plt_path)
+                plt.close()
+        else:
+            # Plot transformed spectra when y_test is not available
+            for name in self.results:
+                plt.figure(figsize=(10, 6))
+                plt.plot(X_test[0], label='Original X_test')
+                plt.plot(self.results[name]['y_pred'][0], label='Transformed')
+                plt.title(f'{name} - Original vs Transformed Spectrum')
+                plt.legend()
+                plt_path = os.path.join(self.output_dir, f'{name}_transformed_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png')
+                plt.savefig(plt_path)
+                plt.close()
+                
+            # Plot all transformed spectra together
+            plt.figure(figsize=(15, 8))
+            plt.plot(X_test[0], label='Original X_test', alpha=0.5)
+            for name in self.results:
+                plt.plot(self.results[name]['y_pred'][0], label=name, alpha=0.7)
+            plt.title('All Models - Transformed Spectra Comparison')
+            plt.legend()
+            plt.tight_layout()
+            plot_path = os.path.join(self.output_dir, f'all_transformed_comparison_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png')
+            plt.savefig(plot_path)
+            plt.close()
+            
+        return plot_path
+    
+    def generate_summary_doc(self, y_test=None):
+        """Generate a summary document with results and recommendations"""
+        doc_path = os.path.join(self.output_dir, f'evaluation_summary_{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt')
+        
+        with open(doc_path, 'w') as f:
+            f.write("Spectral Model Evaluation Results\n")
+            f.write("=" * 50 + "\n\n")
+            
+            if y_test is not None:
+                f.write("Evaluation Metrics:\n")
+                f.write("-" * 20 + "\n")
+                for name in self.results:
+                    f.write(f"Model: {name}\n")
+                    f.write(f"MSE: {self.results[name]['mse']:.6f}\n")
+                    f.write(f"R2 Score: {self.results[name]['r2']:.6f}\n")
+                    f.write("\n")
+                
+                # Find best model based on R2 score
+                best_model = max(self.results.items(), key=lambda x: x[1]['r2'])[0]
+                f.write("Recommendation:\n")
+                f.write("-" * 20 + "\n")
+                f.write(f"Best performing model: {best_model}\n")
+                f.write(f"With R2 Score: {self.results[best_model]['r2']:.6f}\n")
+                f.write(f"With MSE: {self.results[best_model]['mse']:.6f}\n")
+            else:
+                f.write("Note: No y_test provided, showing transformation results only\n")
+                f.write("-" * 20 + "\n")
+                for name in self.results:
+                    f.write(f"Model: {name}\n")
+                    f.write("Transformation completed successfully\n")
+                    f.write("\n")
+                f.write("Recommendation:\n")
+                f.write("-" * 20 + "\n")
+                f.write("Please examine the generated plots to visually assess transformation quality\n")
+            
+            f.write("\nNotes:\n")
+            if y_test is not None:
+                f.write("- Higher R2 Score (closer to 1) indicates better fit\n")
+                f.write("- Lower MSE indicates better prediction accuracy\n")
+            else:
+                f.write("- Plots show original vs transformed spectra for visual comparison\n")
+            
+        return doc_path
+    
+    def run_evaluation(self, X_train, y_train, X_test, y_test=None):
+        """
+        Run complete evaluation pipeline
+        
+        Returns:
+        --------
+        dict: Results containing plot paths and summary document path
+        """
+        self.evaluate_models(X_train, y_train, X_test, y_test)
+        plot_path = self.generate_plots(X_test, y_test)
+        doc_path = self.generate_summary_doc(y_test)
+        
+        return {
+            'plot_path': plot_path,
+            'doc_path': doc_path,
+            'results': self.results
+        }
+
+
 
 
 if __name__ == "__main__":
+
+
+    # Generate dummy data for demonstration
+    np.random.seed(42)
+    X_train = np.random.rand(10, 1200)  # 100 samples, 1200 features
+    y_train = np.random.rand(10, 1200)
+    X_test = np.random.rand(2, 1200)
+    y_test = np.random.rand(2, 1200)
+    
+    evaluator = SpectrumModelEvaluator_v2()
+    results = evaluator.run_evaluation(X_train, y_train, X_test, None)
+    
+    print(f"Plots saved at: {results['plot_path']}")
+    print(f"Summary document saved at: {results['doc_path']}")
+
+
+    exit()
     n_samples = 100
     n_features_proto = 800
     n_features_ft = 614

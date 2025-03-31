@@ -3,6 +3,7 @@ loading data
 -------
 Functions:
 ---------
+    - transform_xlsx_to_mysql(file_path ,machine_type = "卷积式_v1" ,upload_database = False,**kw) 
     - create_connection_for_Guangyin_database( database:str,host:str=GUANGYIN_DATABASE_IP, port:int=GUANGYIN_DATABASE_PORT, user:str='root', password:str='Guangyin88888888@',charset:str='utf8mb4'): 创建与Guangyin数据库的连接
     - insert_prototype_data_to_mysql(connection:object,   table_name:str,  PD样品:list, PD光源:Union[list,None], PD背景:Union[list,None], 重建样品:Union[list,None], 重建光源:Union[list,None], 重建样品扣背景:Union[list,None], 项目名称:str, 项目类型:str, 采集部位:Union[str,None], 采集日期:str, 志愿者:Union[str,None], 理化值:dict, 创建时间:Union[str,datetime.datetime],备注信息:Union[str,None]=None, 是否删除:Union[int,None]=None, 删除时间:Union[datetime.datetime,None]=None): 没有返回值
     - insert_spectrum_data_to_mysql(table_name:str,   光谱:list,  项目名称:str, 项目类型:str,  采集日期:str,理化值:dict,创建时间:str,光谱类型:str=None,采集部位:str=None, 志愿者:str=None,是否删除:int=None, 删除时间:str=None):没有返回值
@@ -120,16 +121,19 @@ def transform_xlsx_to_mysql(file_path ,machine_type = "卷积式_v1" ,upload_dat
     ## sheet of Spectrum Sample
     spectrum_sample = pd.read_excel(file_path,sheet_name="Recon Sample")
     if spectrum_sample.shape[0] == 0:
+        raw_spectrum_sample_len = spectrum_sample.shape[0]
         spectrum_sample = pd.DataFrame(None, index=range(pd_sample.shape[0]), columns=pd_sample.columns)
 
     ## sheet of Spectrum Source
     spectrum_source = pd.read_excel(file_path,sheet_name="Recon Source")
     if spectrum_source.shape[0] == 0:
+        raw_spectrum_source_len = spectrum_source.shape[0]
         spectrum_source = pd.DataFrame(None, index=range(pd_sample.shape[0]), columns=pd_sample.columns)
 
     ## sheet of Spectrum Corrected
     spectrum_corrected = pd.read_excel(file_path,sheet_name="Corrected spectrum")
     if spectrum_corrected.shape[0] == 0:
+        raw_spectrum_corrected_len = spectrum_corrected.shape[0]
         spectrum_corrected = pd.DataFrame(None, index=range(pd_sample.shape[0]), columns=pd_sample.columns)
     
     biomarks = pd.read_excel(file_path,sheet_name="Measured_Value")
@@ -140,7 +144,6 @@ def transform_xlsx_to_mysql(file_path ,machine_type = "卷积式_v1" ,upload_dat
 
     # Create DataFrame with file_name and created_time
     df = pd.DataFrame({
-        'file_name': file_name,
         'created_time': created_time,
         'volunteer': volunteer,
         'project_type': project_type,
@@ -197,9 +200,13 @@ def transform_xlsx_to_mysql(file_path ,machine_type = "卷积式_v1" ,upload_dat
                             json.dumps(df.iloc[i]["pd_sample"],ensure_ascii=False),
                             json.dumps(df.iloc[i]["pd_source"],ensure_ascii=False),
                             json.dumps(df.iloc[i]["pd_background"],ensure_ascii=False),
-                            json.dumps(df.iloc[i]["spectrum_sample"],ensure_ascii=False),
-                            json.dumps(df.iloc[i]["spectrum_source"],ensure_ascii=False),
-                            json.dumps(df.iloc[i]["spectrum_corrected"],ensure_ascii=False),
+                            # json.dumps(df.iloc[i]["spectrum_sample"],ensure_ascii=False),
+                            # json.dumps(df.iloc[i]["spectrum_source"],ensure_ascii=False),
+                            # json.dumps(df.iloc[i]["spectrum_corrected"],ensure_ascii=False),
+                            None if raw_spectrum_sample_len == 0 else json.dumps(df.iloc[i]["spectrum_sample"],ensure_ascii=False),
+                            None if raw_spectrum_source_len == 0 else json.dumps(df.iloc[i]["spectrum_source"],ensure_ascii=False),
+                            None if raw_spectrum_corrected_len == 0 else json.dumps(df.iloc[i]["spectrum_corrected"],ensure_ascii=False),
+                            
                             json.dumps(df.iloc[i]["biomarks"],ensure_ascii=False),
                             datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         )
@@ -219,11 +226,129 @@ def transform_xlsx_to_mysql(file_path ,machine_type = "卷积式_v1" ,upload_dat
     return df
 
 
+
+def upload_to_spectrometer_db(file_path ,machine_type = "FT光谱仪" ,database_table = "FT光谱仪" ,upload_database = False,**kw):
+    """把商用光谱仪xlsx文件上传到mysql数据库
+    
+    """
+    ## if progress_bar is not None, then show progress bar
+    progress_bar =  kw.get("progress_bar",None)
+    if progress_bar is not None:
+        progress_bar.start()
+
+
+
+    ## sheet of Sample Info
+    Sample_Info = pd.read_excel(file_path,sheet_name="Sample Info")
+    file_name = Sample_Info["file_name"]
+    created_time = Sample_Info["created_time"]
+    volunteer = Sample_Info["volunteer"] if "volunteer" in Sample_Info.columns else []
+    project_type = Sample_Info["project_type"] if "project_type" in Sample_Info.columns else []
+    project_name = Sample_Info["project_name"] if "project_name" in Sample_Info.columns else []
+    collect_site = Sample_Info["collect_site"] if "collect_site" in Sample_Info.columns else []
+
+    ## sheet of PD Sample
+    pd_sample = pd.read_excel(file_path,sheet_name="PD Sample")
+    
+    ## sheet of PD Source
+    pd_source = pd.read_excel(file_path,sheet_name="PD Source")
+
+    ## sheet of PD Background
+    pd_background = pd.read_excel(file_path,sheet_name="PD BG")
+    if pd_background.shape[0] == 0:
+        pd_background = pd.DataFrame(None, index=range(pd_sample.shape[0]), columns=pd_sample.columns)
+
+    ## sheet of Spectrum Sample
+    spectrum_sample = pd.read_excel(file_path,sheet_name = machine_type)
+
+    if spectrum_sample.shape[0] == 0:
+        assert False,f"文件{file_path}中没有{machine_type}表"
+
+    
+    biomarks = pd.read_excel(file_path,sheet_name="Measured_Value")
+
+
+
+
+    # Create DataFrame with file_name and created_time
+    df = pd.DataFrame({
+        '采集日期': created_time,
+        '志愿者': volunteer,
+        '项目类型': project_type,
+        '项目名称': project_name,
+        '采集部位': collect_site,
+        '光谱':  [json.dumps(row.tolist(),ensure_ascii=False)   for _, row in spectrum_sample.iterrows()],
+        '理化值': [row.to_dict() for _, row in biomarks.iterrows()]
+    })
+    if upload_database:
+        connection = pymysql.connect(
+            host=MYSQL_HOST,
+            port=MYSQL_PORT,
+            user=MYSQL_USER,
+            password=MYSQL_PASSWORD,
+            database='光谱数据库',
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor
+        )
+        if progress_bar:
+            progress_bar["maximum"] = len(df)+1
+
+        for i in tqdm(range(len(df))):
+            if progress_bar:
+                progress_bar["value"] = i + 1
+                progress_bar.update_idletasks()
+                progress_bar.update()
+            # 建立游标
+            with connection.cursor() as cursor:
+
+                if 1:
+                    # 创建 SQL 插入语句
+                    sql = f"""
+                INSERT INTO {database_table}(
+                    光谱, 项目名称, 项目类型, 采集部位, 采集日期, 志愿者, 理化值, 创建时间, 是否删除, 删除时间
+                )
+                VALUES (
+                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                """
+                    insert_data =  (
+                            df.iloc[i]["光谱"],
+                            df.iloc[i]["项目名称"],
+                            None if pd.isna(df.iloc[i]["项目类型"]) else df.iloc[i]["项目类型"],
+                            None if pd.isna(df.iloc[i]["采集部位"]) else df.iloc[i]["采集部位"],
+                            df.iloc[i]["采集日期"],
+                            df.iloc[i]["志愿者"],
+                            json.dumps(df.iloc[i]["理化值"],ensure_ascii=False),
+                            datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            0,
+                            None
+                        )
+                    cursor.execute(sql, insert_data)
+
+                # 执行 SQL 插入操作
+                
+                # 提交事务
+                connection.commit()
+        connection.close()
+        if kw.get("progress_bar",None):
+            progress_bar.stop()
+        return True
+    
+    return df
+
+
+
+
+
 def transform_xlsx_to_database(file_path ,machine_type = "样机_卷积式_v1" ,upload_database = False,**kw):
     """把样机xlsx文件上传到mysql数据库
     
     """
     ## if progress_bar is not None, then show progress bar
+
+    warnings.warn("transform_xlsx_to_database is deprecated, please use transform_xlsx_to_mysql instead")
+
+
     if kw.get("progress_bar",None):
         progress_bar = kw["progress_bar"]
         progress_bar.start()
@@ -356,7 +481,7 @@ def transform_xlsx_to_database(file_path ,machine_type = "样机_卷积式_v1" ,
 
 
 
-def get_wavelength_list(mechine_type:str = "FT光谱仪"):
+def get_wavelength_list(mechine_type:str = "FT"):
     wavelength_dict_path =  os.path.join(os.path.dirname(__file__), "wavelength_dict.pkl")
 
     import pickle
@@ -710,10 +835,22 @@ def insert_spectrum_data_to_mysql(table_name:str,光谱:list,项目名称:str,�
     #     connection.close()
     #     return True
 
-def get_dataset_from_mysql(table_name:str, project_name:str, X_type:list, y_type:list=None,  start_time:str="1970-01-01 00:00:00", end_time:str="2100-01-01 00:00:00",volunteer:str=None,database='样机数据库'):
-    '''
-    example:
-        dataset_X = get_dataset_from_mysql(database='光谱数据库',table_name="复享光谱仪", project_name="多发光单收光探头血糖数据", X_type=['光谱',"采集日期","志愿者"], )
+def get_dataset_from_mysql(table_name:str, project_name:str, X_type:list, y_type:list=None,  start_time:str="1970-01-01 00:00:00", end_time:str="2100-01-01 00:00:00",volunteer:str=None,database='样机数据库')->dict:
+    ''' 从MySQL数据库中获取数据，返回一个字典，字典的键为X_type和y_type，值为对应的数组
+        Args:
+            table_name: 表名
+            project_name: 项目名称
+            X_type: 需要获取的列名
+            y_type: 需要获取的理化值列 中 元素的key
+            start_time: 开始时间
+            end_time: 结束时间
+            volunteer: 志愿者
+            database: 数据库名
+        Returns:
+            dataset: 一个字典，字典的键为X_type和y_type，值为对应的数组
+
+        example:
+            dataset_X = get_dataset_from_mysql(database='光谱数据库',table_name="复享光谱仪", project_name="多发光单收光探头血糖数据", X_type=['光谱',"采集日期","志愿者"],y_type=['实测值'])
 
     '''
     if volunteer is None:
@@ -741,26 +878,27 @@ def get_dataset_from_mysql(table_name:str, project_name:str, X_type:list, y_type
                 temp.append(json.loads(j)[i])
             dataset[i] = np.array(temp)
 
-    elif y_type is None:
-        for i in json.loads(data['理化值'][0]).keys():
-            temp = []
-            for j in data['理化值'].values:
-                temp.append(json.loads(j)[i])
-            dataset[i] = np.array(temp)
-    
+    # elif y_type is None:
+    #     for i in json.loads(data['理化值'][0]).keys():
+    #         temp = []
+    #         for j in data['理化值'].values:
+    #             temp.append(json.loads(j)[i])
+    #         dataset[i] = np.array(temp)
 
-
-    
 
     return dataset
 
 def get_data_from_mysql(sql,database='样机数据库'):
-    '''
-    example:
-        sql = "SELECT id,志愿者,采集日期,理化值 FROM `光谱数据库`.`FT光谱仪` WHERE `项目名称`='血糖数据'"
-    data = get_data_from_mysql(sql)
-    print(data)
-    data.to_csv("血糖数据.csv",index=False)
+    ''' 从MySQL数据库中获取数据，返回一个DataFrame
+        Args:       
+            sql: 查询语句
+            database: 数据库名
+        Returns:
+            data: 一个DataFrame
+
+        example:
+            sql = "SELECT id,志愿者,采集日期,理化值 FROM `光谱数据库`.`FT光谱仪` WHERE `项目名称`='血糖数据'"
+            data = get_data_from_mysql(sql)
     '''
     conn = pymysql.connect(host=GUANGYIN_DATABASE_IP,port=GUANGYIN_DATABASE_PORT, user='select_user1', password='select_user1', database=database, charset='utf8mb4')
     data = pd.read_sql(sql, conn)

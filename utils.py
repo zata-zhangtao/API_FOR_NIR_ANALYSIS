@@ -42,12 +42,314 @@ import time
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from mpl_toolkits.mplot3d import Axes3D
-
-
-
-
 import datetime
 from nirapi.AnalysisClass.CreateTrainReport import CreateTrainReport
+
+
+
+
+def train_pred_with_bands(X, y, metric='MAE', n_splits=5, n_iterations=10, test_size=0.2, random_state=42, verbose=True, n_bands=5):
+    """
+    使用四种验证方法评估不同频段的性能，并返回最优的频段
+    
+    Args:
+        X (numpy.ndarray): 特征矩阵，形状为 (n_samples, n_features)
+        y (numpy.ndarray): 目标变量，形状为 (n_samples,)
+        metric (str): 评估指标, 'R2' 或 'MAE'
+        n_splits (int): K折交叉验证的折数
+        n_iterations (int): Bootstrapping的迭代次数
+        test_size (float): 测试集比例
+        random_state (int): 随机种子
+        verbose (bool): 是否打印详细信息
+        n_bands (int): 要划分的频段数量，默认为5
+    
+    Returns:
+        dict: 包含各种验证方法的结果和最优频段信息
+        
+    Examples:
+        import numpy as np
+        from sklearn.datasets import make_regression
+
+        # Generate sample data
+        X, y = make_regression(n_samples=100, n_features=1000, random_state=42)
+
+        # Test with MAE metric and 5 bands
+        results_mae = train_pred_with_bands(
+            X, y,
+            metric='MAE',
+            n_splits=5,
+            n_iterations=10,
+            test_size=0.2,
+            random_state=42,
+            verbose=True,
+            n_bands=5
+        )
+
+        # Test with R2 metric and 3 bands
+        results_r2 = train_pred_with_bands(
+            X, y,
+            metric='R2',
+            n_splits=5,
+            n_iterations=10,
+            test_size=0.2,
+            random_state=42,
+            verbose=True,
+            n_bands=3
+        )
+
+        # Print results
+        print("\nMAE Results:")
+        for method, result in results_mae.items():
+            print(f"{method}: Best band = {result['best_band']}, MAE = {result['MAE']:.4f}")
+
+        print("\nR2 Results:")
+        for method, result in results_r2.items():
+            print(f"{method}: Best band = {result['best_band']}, R2 = {result['R2']:.4f}")
+    """
+    from sklearn.model_selection import KFold, train_test_split
+    from sklearn.utils import resample
+    import numpy as np
+    from nirapi.ML_model import custom_train_test_split
+
+    def model_train_and_predict(X_train, y_train, X_test, y_test,plot=False):
+        """
+        训练模型并进行预测,返回评估指标
+        
+        参数:
+            X_train: 训练集特征
+            y_train: 训练集标签
+            X_test: 测试集特征 
+            y_test: 测试集标签
+        """
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.ensemble import RandomForestRegressor
+        from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+        from sklearn.model_selection import train_test_split
+        from sklearn.decomposition import PCA
+        import numpy as np
+        import matplotlib.pyplot as plt
+        from scipy.stats import pearsonr
+        
+        # 数据标准化
+        scaler_X = StandardScaler()
+        scaler_y = StandardScaler()
+        
+        X_train_scaled = scaler_X.fit_transform(X_train)
+        X_test_scaled = scaler_X.transform(X_test)
+        
+        # PCA降维
+        pca = PCA(n_components=0.95)  # 保留95%的方差
+        X_train_pca = pca.fit_transform(X_train_scaled)
+        X_test_pca = pca.transform(X_test_scaled)
+        print(f"PCA降维后的特征数量: {X_train_pca.shape[1]}")
+        
+        # 确保y是2D数组
+        if len(y_train.shape) == 1:
+            y_train = y_train.reshape(-1, 1)
+        if len(y_test.shape) == 1:
+            y_test = y_test.reshape(-1, 1)
+            
+        y_train_scaled = scaler_y.fit_transform(y_train)
+        y_test_scaled = scaler_y.transform(y_test)
+        
+        # 训练模型
+        model = RandomForestRegressor(n_estimators=100, random_state=42)
+        model.fit(X_train_pca, y_train_scaled)
+        
+        # 预测
+        y_train_pred_scaled = model.predict(X_train_pca)
+        y_train_pred = scaler_y.inverse_transform(y_train_pred_scaled.reshape(-1, 1))
+        
+        y_test_pred_scaled = model.predict(X_test_pca)
+        y_test_pred = scaler_y.inverse_transform(y_test_pred_scaled.reshape(-1, 1))
+        
+        # 计算评估指标
+        metrics = {}
+        for i in range(y_test.shape[1]):
+            # 计算相关系数r
+            r_train, _ = pearsonr(y_train[:, i].flatten(), y_train_pred[:, i].flatten())
+            r_test, _ = pearsonr(y_test[:, i].flatten(), y_test_pred[:, i].flatten())
+            
+            metrics[f'Target_{i+1}'] = {
+                'R2_train': r2_score(y_train[:, i], y_train_pred[:, i]),
+                'RMSE_train': np.sqrt(mean_squared_error(y_train[:, i], y_train_pred[:, i])),
+                'MAE_train': mean_absolute_error(y_train[:, i], y_train_pred[:, i]),
+                'r_train': r_train,
+                'R2_test': r2_score(y_test[:, i], y_test_pred[:, i]),
+                'RMSE_test': np.sqrt(mean_squared_error(y_test[:, i], y_test_pred[:, i])),
+                'MAE_test': mean_absolute_error(y_test[:, i], y_test_pred[:, i]),
+                'r_test': r_test
+            }
+        
+        # 打印评估指标
+        print("\n模型评估指标:")
+        for target, scores in metrics.items():
+            print(f"\n{target}:")
+            for metric_name, value in scores.items():
+                print(f"{metric_name}: {value:.4f}")
+        
+        # 绘制预测值与真实值的对比图
+        if plot:
+            plt.figure(figsize=(15, 6))
+                
+            # 训练集
+            plt.subplot(1, 2, 1)
+            plt.scatter(y_train, y_train_pred, alpha=0.5, label='训练集')
+            plt.plot([y_train.min(), y_train.max()], [y_train.min(), y_train.max()], 'r--', lw=2)
+            plt.xlabel('真实值')
+            plt.ylabel('预测值')
+            plt.title('训练集: 预测值 vs 真实值')
+            # 添加评估指标文本
+            text = f'R2 = {metrics["Target_1"]["R2_train"]:.4f}\nRMSE = {metrics["Target_1"]["RMSE_train"]:.4f}\nMAE = {metrics["Target_1"]["MAE_train"]:.4f}\nr = {metrics["Target_1"]["r_train"]:.4f}'
+            plt.text(0.05, 0.95, text, transform=plt.gca().transAxes, 
+                    verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            plt.grid(True)
+            plt.legend()
+            
+            # 测试集
+            plt.subplot(1, 2, 2)
+            plt.scatter(y_test, y_test_pred, alpha=0.5, label='测试集')
+            plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2)
+            plt.xlabel('真实值')
+            plt.ylabel('预测值')
+            plt.title('测试集: 预测值 vs 真实值')
+            # 添加评估指标文本
+            text = f'R2 = {metrics["Target_1"]["R2_test"]:.4f}\nRMSE = {metrics["Target_1"]["RMSE_test"]:.4f}\nMAE = {metrics["Target_1"]["MAE_test"]:.4f}\nr = {metrics["Target_1"]["r_test"]:.4f}'
+            plt.text(0.05, 0.95, text, transform=plt.gca().transAxes, 
+                    verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            plt.grid(True)
+            plt.legend()
+            
+            plt.tight_layout()
+            plt.show()
+                    
+        return metrics
+
+    
+    # 将数据分成指定数量的频段
+    n_features = X.shape[1]
+    band_size = n_features // n_bands
+    bands = []
+    band_names = []
+    
+    for i in range(n_bands):
+        start_idx = i * band_size
+        end_idx = start_idx + band_size if i < n_bands-1 else n_features
+        bands.append(X[:, start_idx:end_idx])
+        band_names.append(f"band{i+1}")
+    
+    results = {}
+    
+    def print_result(message):
+        if verbose:
+            print(message)
+    
+    # 1. 固定比例分割验证
+    print_result("\n固定比例分割验证:")
+    fixed_results = []
+    for i, band in enumerate(bands):
+        X_train, X_test, y_train, y_test = train_test_split(
+            band, y, test_size=test_size, random_state=random_state
+        )
+        metrics = model_train_and_predict(X_train, y_train, X_test, y_test)
+        score = metrics["Target_1"]["R2_test"] if metric == 'R2' else metrics["Target_1"]["MAE_test"]
+        fixed_results.append(score)
+        print_result(f"频段 {band_names[i]}: {metric} = {score:.4f}")
+    
+    best_band_fixed = band_names[np.argmin(fixed_results) if metric == 'MAE' else np.argmax(fixed_results)]
+    best_score_fixed = min(fixed_results) if metric == 'MAE' else max(fixed_results)
+    results["固定比例分割"] = {"best_band": best_band_fixed, metric: best_score_fixed}
+    
+    # 2. K折交叉验证
+    print_result("\nK折交叉验证:")
+    cv_results = []
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
+    
+    for i, band in enumerate(bands):
+        scores = []
+        for train_idx, test_idx in kf.split(band):
+            X_train, X_test = band[train_idx], band[test_idx]
+            y_train, y_test = y[train_idx], y[test_idx]
+            metrics = model_train_and_predict(X_train, y_train, X_test, y_test)
+            score = metrics["Target_1"]["R2_test"] if metric == 'R2' else metrics["Target_1"]["MAE_test"]
+            scores.append(score)
+        
+        avg_score = np.mean(scores)
+        cv_results.append(avg_score)
+        print_result(f"频段 {band_names[i]}: 平均{metric} = {avg_score:.4f}")
+    
+    best_band_cv = band_names[np.argmin(cv_results) if metric == 'MAE' else np.argmax(cv_results)]
+    best_score_cv = min(cv_results) if metric == 'MAE' else max(cv_results)
+    results["交叉验证"] = {"best_band": best_band_cv, metric: best_score_cv}
+    
+    # 3. SPXY方法
+    print_result("\nSPXY验证:")
+    spxy_results = []
+    
+    for i, band in enumerate(bands):
+        X_train, X_test, y_train, y_test = custom_train_test_split(
+            band.astype(np.float32), y.astype(np.float32), 
+            test_size=test_size, method="SPXY"
+        )
+        metrics = model_train_and_predict(X_train, y_train, X_test, y_test)
+        score = metrics["Target_1"]["R2_test"] if metric == 'R2' else metrics["Target_1"]["MAE_test"]
+        spxy_results.append(score)
+        print_result(f"频段 {band_names[i]}: {metric} = {score:.4f}")
+    
+    best_band_spxy = band_names[np.argmin(spxy_results) if metric == 'MAE' else np.argmax(spxy_results)]
+    best_score_spxy = min(spxy_results) if metric == 'MAE' else max(spxy_results)
+    results["SPXY"] = {"best_band": best_band_spxy, metric: best_score_spxy}
+    
+    # 4. Bootstrapping方法
+    print_result("\nBootstrapping验证:")
+    bootstrap_results = []
+    
+    for i, band in enumerate(bands):
+        scores = []
+        for _ in range(n_iterations):
+            indices = resample(
+                range(len(band)), 
+                replace=True, 
+                n_samples=len(band), 
+                random_state=random_state + _
+            )
+            test_indices = list(set(range(len(band))) - set(indices))
+            
+            X_train, y_train = band[indices], y[indices]
+            X_test, y_test = band[test_indices], y[test_indices]
+            
+            metrics = model_train_and_predict(X_train, y_train, X_test, y_test)
+            score = metrics["Target_1"]["R2_test"] if metric == 'R2' else metrics["Target_1"]["MAE_test"]
+            scores.append(score)
+        
+        avg_score = np.mean(scores)
+        bootstrap_results.append(avg_score)
+        print_result(f"频段 {band_names[i]}: 平均{metric} = {avg_score:.4f}")
+    
+    best_band_bootstrap = band_names[np.argmin(bootstrap_results) if metric == 'MAE' else np.argmax(bootstrap_results)]
+    best_score_bootstrap = min(bootstrap_results) if metric == 'MAE' else max(bootstrap_results)
+    results["Bootstrapping"] = {"best_band": best_band_bootstrap, metric: best_score_bootstrap}
+    
+    # 汇总结果
+    print_result(f"\n不同验证方法的最优频段和{metric}值:")
+    for method, result in results.items():
+        print_result(f"{method}: 最优频段 = {result['best_band']}, {metric} = {result[metric]:.4f}")
+    
+    # 找出总体最优的频段
+    all_scores = [results[method][metric] for method in results]
+    best_method = list(results.keys())[np.argmin(all_scores) if metric == 'MAE' else np.argmax(all_scores)]
+    overall_best_band = results[best_method]["best_band"]
+    overall_best_score = min(all_scores) if metric == 'MAE' else max(all_scores)
+    
+    print_result(f"\n总体最优频段: {overall_best_band}, 方法: {best_method}, {metric} = {overall_best_score:.4f}")
+    
+    return results
+
+
+
+
+
+
 
 
 def train_model_for_trick_game_v2(max_attempts = 10,splited_data=None, X=None, y=None, test_size=0.34,  n_trials=100, selected_metric="rmse", target_score=0.0002,filename = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),**kw):
@@ -563,21 +865,44 @@ def NO_FS_LR_SVR_train_and_eval(X = None,y = None ,category = "all_samples",proc
             plt.scatter(y_train,y_train_pred,label='Training set')
             plt.scatter(y_test,y_test_pred,label='Testing set')
             from sklearn.metrics import mean_squared_error,mean_absolute_error,r2_score
+            import numpy as np
+            
+            # 计算各项指标
             MAE = mean_absolute_error(y_test,y_test_pred)
+            MSE = mean_squared_error(y_test,y_test_pred)
+            RMSE = np.sqrt(MSE)
             R2 = r2_score(y_test,y_test_pred)
+            r = np.corrcoef(y_test,y_test_pred)[0,1]
+            
             plt.xlabel('True Values')
             plt.ylabel('Predicted Values')
-            plt.plot([min(min(y_test),min(y_train)),max(max(y_train),max(y_test))],[min(min(y_test),min(y_train)),max(max(y_train),max(y_test))],'r-')
-            plt.text(min(y_test),min(y_train),"MAE:{:.5},R2:{:.5}".format(MAE,R2))
+            plt.plot([min(min(y_test),min(y_train)),max(max(y_train),max(y_test))],
+                    [min(min(y_test),min(y_train)),max(max(y_train),max(y_test))],'r-')
+            
+            # 创建文本框显示指标
+            textstr = '\n'.join((
+                f'MAE: {MAE:.4f}',
+                f'MSE: {MSE:.4f}',
+                f'RMSE: {RMSE:.4f}',
+                f'R2: {R2:.4f}',
+                f'r: {r:.4f}'))
+            
+            # 添加文本框
+            props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+            plt.text(0.05, 0.95, textstr, transform=plt.gca().transAxes, fontsize=10,
+                    verticalalignment='top', bbox=props)
+            
             plt.legend()
             plt.title(category+" train_test_Scatter")
-
 
         plt.subplot(1,2,1)
         train_test_scatter(y_train,y_train_pred,y_test,y_test_pred,category= category+" LR")
     else:
         from sklearn.metrics import mean_squared_error,mean_absolute_error,r2_score
+        import numpy as np
         LR_MAE = mean_absolute_error(y_test,y_test_pred)
+        LR_MSE = mean_squared_error(y_test,y_test_pred)
+        LR_RMSE = np.sqrt(LR_MSE)
         LR_R2 = r2_score(y_test,y_test_pred)
 
 
@@ -617,10 +942,13 @@ def NO_FS_LR_SVR_train_and_eval(X = None,y = None ,category = "all_samples",proc
         plt.show()
     else:
         from sklearn.metrics import mean_squared_error,mean_absolute_error,r2_score
+        import numpy as np
         SVR_MAE = mean_absolute_error(y_test,y_test_pred)
+        SVR_MSE = mean_squared_error(y_test,y_test_pred)
+        SVR_RMSE = np.sqrt(SVR_MSE)
         SVR_R2 = r2_score(y_test,y_test_pred)
 
-        return (round(LR_MAE,3),round(LR_R2,3)),(round(SVR_MAE,3),round(SVR_R2,3))
+        return (round(LR_MAE,3),round(LR_RMSE,3),round(LR_R2,3)),(round(SVR_MAE,3),round(SVR_RMSE,3),round(SVR_R2,3))
 
 def NO_FS_PLSR_train_and_eval(X,y,category = "all_sample",processed_X = None,samples_test_size = 0.33,draw = True,n_components = 10):
     """

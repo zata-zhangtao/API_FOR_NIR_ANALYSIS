@@ -535,41 +535,28 @@ def matlplotlib_chinese_display_fix():
     plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
 
-def plot_mean( data_X, data_y = None,data_name = '',X_name = '',y_name='',scale=True,draw_y=True, save_dir=None,width_and_height=None,X_ticks=None):
-# 2024-10-10
-    '''
-    example:
-        # 数据名
-        data_name = 'Simple Data Example'
-        X_name = 'Feature Mean'
-        y_name = 'Target'
+def plot_mean( data_X, data_y = None,data_name = '',X_name ='强度',y_name="理化值",scale=True,draw_y=True, save_dir=None,width_and_height=None,X_ticks=None):
+    """
+    绘制光谱数据X与理化值y的平均光谱
 
-        # 随机生成10个样本，每个样本有5个特征
-        data_X = np.random.rand(10, 5)
+    Args:
+        data_X: 光谱数据矩阵
+        data_y: 理化值数据向量
+        data_name: 数据名
+        X_name: 特征名
+        y_name: 标签名
+        scale: 是否进行数据缩放
+        draw_y: 是否画y轴
+        save_dir: 保存路径
+        width_and_height: 宽度和高度
+        X_ticks: 横坐标刻度
 
-        # 随机生成10个标签
-        data_y = np.random.rand(10)
-        width_and_height = (1800, 1200)
-
-        # 调用plot_mean函数进行绘图
-        plot_mean(data_name, X_name, y_name, data_X, data_y, scale=True, draw_y=True)
-
-    ---------
-    Parameters:
-    ---------
-        - data_name : str 数据名
-        - X_name : str 特征名
-        - y_name : str 标签名
-        - data_X : ndarray 特征数据
-        - data_y : ndarray 标签数据
-        - scale : bool 是否进行数据缩放
-        - draw_y : bool 是否画y轴
-        - save_dir : str 保存路径
-        ---------
     Returns:
-    ---------
-        - 绘制均值变化图
-    '''
+        None
+    """
+
+    # v1.0 2024-10-10
+
     
     data_X_mean = np.mean(data_X, axis=1)
 
@@ -603,8 +590,8 @@ def plot_mean( data_X, data_y = None,data_name = '',X_name = '',y_name='',scale=
         # 设置图表布局，包括标题
     fig.update_layout(
         title=f"Mean of {data_name}",
-        xaxis_title="X Axis Title",
-        yaxis_title="Y Axis Title"
+        xaxis_title="样品序号",
+        yaxis_title="强度/理化值"
     )
     
     if width_and_height is None:

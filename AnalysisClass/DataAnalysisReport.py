@@ -291,7 +291,11 @@ class SpectralAnalysisReport:
             
             # 3. 其他特征分析
             self.add_heading("3. 其他特征分析", 2)
-            self._analyze_other_features()
+            try:
+                self._analyze_other_features()
+            except Exception as e:
+                self.add_paragraph(f"没有其他特征数据或其他特征数据分析失败：{e}")
+                self.add_paragraph(f"错误位置：{e.__traceback__.tb_frame.f_code.co_filename}:{e.__traceback__.tb_lineno}")
             
             # 4. 时间模式分析
             if '采集日期' in self.dataset:
@@ -330,14 +334,23 @@ class SpectralAnalysisReport:
             # 6. 相关性分析
             if len(self.dataset.keys()) > 1:
                 self.add_heading("6. 特征相关性分析", 2)
-                self._analyze_correlations()
+                try:
+                    self._analyze_correlations()
+                except Exception as e:
+                    self.add_paragraph(f"特征相关性分析失败：{e}")
+                    self.add_paragraph(f"错误位置：{e.__traceback__.tb_frame.f_code.co_filename}:{e.__traceback__.tb_lineno}")
 
             # 
             self._analyze_spectral_details()
 
             # 7. 模型分析
             self.add_heading("7. 模型分析", 2)
-            self._analyze_models()
+            try:
+                self._analyze_models()
+            except Exception as e:
+                print(f"{sys._getframe().f_lineno}: analyze models failed: {str(e)}")
+                self.add_paragraph(f"模型分析失败：{e}")
+                self.add_paragraph(f"错误位置：{e.__traceback__.tb_frame.f_code.co_filename}:{e.__traceback__.tb_lineno}")
 
         
         
@@ -362,14 +375,19 @@ class SpectralAnalysisReport:
             if key != '光谱':  # 排除光谱数据
                 try:
                     # 尝试转换为数值类型
+                    print(value)
                     numeric_data = pd.to_numeric(value, errors='coerce')
-                    if not numeric_data.isna().all():  # 如果不是全部为NA，则认为是数值型
+                    if  pd.api.types.is_numeric_dtype(numeric_data):  # 如果不是全部为NA，则认为是数值型
                         plottable_data[key] = numeric_data
                     else:  # 如果全部转换失败，则作为分类数据处理
                         plottable_data[key] = pd.Series(value).astype(str)
-                except:
+                except Exception as e:
+                    print(f"错误发生在: {e.__traceback__.tb_frame.f_code.co_filename} 第 {e.__traceback__.tb_lineno} 行")
                     # 如果转换失败，作为分类数据处理
+
                     plottable_data[key] = pd.Series(value).astype(str)
+
+                    
         if len(plottable_data) < 2:
             self.add_paragraph("数据集中可用于关系分析的变量少于2个，无法进行关系可视化。")
             return
@@ -380,7 +398,7 @@ class SpectralAnalysisReport:
                 fig = plt.figure(figsize=(12, 6))
                 
                 # 根据数据类型选择适当的可视化方法
-                if pd.api.types.is_numeric_dtype(data1) and pd.api.types.is_numeric_dtype(data2) and not data1.isna().all() and not data2.isna().all():
+                if pd.api.types.is_numeric_dtype(data1) and pd.api.types.is_numeric_dtype(data2):
                     # 数值 vs 数值：散点图
                     plt.scatter(data1, data2, alpha=0.5)
                     
@@ -540,8 +558,8 @@ class SpectralAnalysisReport:
                         pass
 
                 # plt.title(f'{key1} vs {key2} relationship')
-                plt.xlabel(key2)
-                plt.ylabel(key1)
+                plt.xlabel(key1)
+                plt.ylabel(key2)
                 plt.grid(True, alpha=0.3)
                 
                 # 调整布局以避免标签重叠
@@ -775,16 +793,19 @@ class SpectralAnalysisReport:
         categorical_features = {}
         
         for key, value in self.dataset.items():
-            if key != '光谱':
-                if pd.api.types.is_numeric_dtype(value):
-                    chemical_features[key] = value
-                else:
-                    try:
-                        # 尝试转换为数值类型
-                        numeric_value = pd.to_numeric(value)
-                        chemical_features[key] = numeric_value
-                    except:
-                        categorical_features[key] = value
+            try:
+                if key != '光谱':
+                    if pd.api.types.is_numeric_dtype(value):
+                        chemical_features[key] = value
+                    else:
+                        try:
+                            # 尝试转换为数值类型
+                            numeric_value = pd.to_numeric(value)
+                            chemical_features[key] = numeric_value
+                        except:
+                            categorical_features[key] = value
+            except Exception as e:
+                print(f"{sys._getframe().f_lineno}: analyze models failed: {str(e)}")
         
         if not chemical_features:
             return

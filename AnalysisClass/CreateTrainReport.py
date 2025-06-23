@@ -369,7 +369,7 @@ class CreateTrainReport:
             r = np.corrcoef(y_true, y_pred)[0,1]
             
             # 累加指标文本
-            textstr += f'{col}:\nR2 = {r2:.5f}\nMAE = {mae:.5f}\nRMSE = {rmse:.5f}\n\n'
+            textstr += f'{col}:\nR2 = {r2:.5f}\nMAE = {mae:.5f}\nRMSE = {rmse:.5f}\nr = {r:.5f}\n\n'
             
         # 添加对角线
         plt.plot([min_val, max_val], [min_val, max_val], 'k--', alpha=0.5)

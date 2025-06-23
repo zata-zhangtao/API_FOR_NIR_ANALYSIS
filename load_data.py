@@ -27,6 +27,9 @@ Functions:
     - Transforming_raw_xlsx_data_into_trainable_csv_data 把原始的采集的数据转成dataframe
     - save_dict_to_csv(data, csv_file, fill_value=None)
     - get_wavelength_list  
+    - repeat_values_to_csv 把数据重复n遍并保存为csv文件
+
+
 
 ---------
 Examples:
@@ -64,6 +67,7 @@ from tqdm import tqdm
 import time
 import pymysql
 import json
+import functools
 
 # 定义数据库IP常量
 
@@ -87,6 +91,129 @@ MYSQL_PASSWORD = 'Guangyin88888888@'
 #############################################################################################################################################################################################
 
 
+
+def cache_data(cache_path):
+    '''
+    装饰器函数，用于缓存函数返回的数据
+    
+    Args:
+        cache_path: 缓存文件的路径
+    Returns:
+        decorator: 装饰器函数
+    Examples:
+        @cache_data('20250418_镀膜样机仿体数据.pkl')
+        def load_prot_data():
+            prot_pd_data = pd.read_excel(r'C:\BaiduSyncdisk\0A-ZATA\data\光谱数据\04-17仿体\仿体测试-酒醅样机-0416 .xlsx',sheet_name='样品PD').T.values.astype(float)
+            prot_biomarks_data = pd.read_excel(r'C:\BaiduSyncdisk\0A-ZATA\data\光谱数据\04-17仿体\仿体测试-酒醅样机-0416 .xlsx',sheet_name='理化值').iloc[:,1].values.astype(float)[:42]
+            return {
+                    "光谱":prot_pd_data,
+                    "实测值":prot_biomarks_data
+                    }
+        prot_data = load_prot_data()
+        print(prot_data)
+
+    '''
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            # 检查缓存文件是否存在
+            if os.path.exists(cache_path):
+                print(f"从缓存加载: {cache_path}")
+                with open(cache_path, 'rb') as f:
+                    return pickle.load(f)
+            
+            # 执行原函数
+            result = func(*args, **kwargs)
+            
+            # 确保目录存在
+            os.makedirs(os.path.dirname(os.path.abspath(cache_path)), exist_ok=True)
+            
+            # 保存结果到缓存
+            with open(cache_path, 'wb') as f:
+                pickle.dump(result, f)
+            print(f"已缓存结果到: {cache_path}")
+            
+            return result
+        return wrapper
+    return decorator
+
+def get_dataset_from_mysql_v2( table_name:str, project_name:str, X_type:list,database='样机数据库', y_type:list=None, volunteer:str=None, start_time:str="1970-01-01 00:00:00", end_time:str="2100-01-01 00:00:00")->dict:
+    ''' 从MySQL数据库中获取数据，返回一个字典，字典的键为X_type和y_type，值为对应的数组
+        Args:
+            table_name: 表名
+            project_name: 项目名称
+            X_type: 需要获取的列名
+            y_type: 需要获取的理化值列 中 元素的key
+            start_time: 开始时间
+            end_time: 结束时间
+            volunteer: 志愿者
+            database: 数据库名
+        Returns:
+            dataset: 一个字典，字典的键为X_type和y_type，值为对应的数组
+
+        example:
+            dataset_X = get_dataset_from_mysql(database='光谱数据库',table_name="复享光谱仪", project_name="多发光单收光探头血糖数据", X_type=['光谱',"采集日期","志愿者"],y_type=['实测值'])
+
+    '''
+    if database == '样机数据库' or database == '光谱数据库':
+        if volunteer is None:
+            sql = f"SELECT {','.join(X_type)},理化值 FROM {table_name} WHERE 项目名称 = '{project_name}' AND  `采集日期` BETWEEN '{start_time}' AND '{end_time}' "
+        else:
+            sql = f"SELECT {','.join(X_type)},理化值 FROM {table_name} WHERE 项目名称 = '{project_name}' AND  `采集日期` BETWEEN '{start_time}' AND '{end_time} 23:59:59' AND 志愿者 = '{volunteer}'"
+    elif database == '样机':
+        if volunteer is None:
+            sql = f"SELECT {','.join(X_type)},biomarks FROM {table_name} WHERE project_name = '{project_name}' AND  `created_time` BETWEEN '{start_time}' AND '{end_time}' "
+        else:
+            sql = f"SELECT {','.join(X_type)},biomarks FROM {table_name} WHERE project_name = '{project_name}' AND  `created_time` BETWEEN '{start_time}' AND '{end_time} 23:59:59' AND volunteer = '{volunteer}'"
+        
+    
+    
+    data = get_data_from_mysql(sql,database)
+    dataset = {}
+    label = {}
+
+    def get_json_or_str(data):
+        if isinstance(data, str):
+            try:
+                return json.loads(data)
+            except:
+                return data
+        else:
+            return data
+
+
+    if database == '样机数据库' or database == '光谱数据库':
+        for i in X_type:
+            dataset[i] = np.array([ get_json_or_str(j) for j in data[i].values])
+        if y_type is not None:
+            for i in y_type:
+                temp = []
+                for j in data['理化值'].values:
+                    temp.append(json.loads(j)[i])
+                dataset[i] = np.array(temp)
+    elif database == '样机':
+        for i in X_type:
+            dataset[i] = np.array([ get_json_or_str(j) for j in data[i].values])
+        if y_type:
+            for i in y_type:
+                temp = []
+                for j in data['biomarks'].values:
+                    temp.append(json.loads(j)[i])
+                dataset[i] = np.array(temp)
+        else:
+            y_type = list(json.loads(data['biomarks'].values[0]).keys()) 
+            for i in y_type:
+                temp = []
+                for j in data['biomarks'].values:
+                    temp.append(json.loads(j)[i])
+                dataset[i] = np.array(temp)
+
+    return dataset
+
+
+
+
+
 def transform_xlsx_to_mysql(file_path ,machine_type = "卷积式_v1" ,upload_database = False,**kw):
     """把样机xlsx文件上传到mysql数据库
     
@@ -107,6 +234,7 @@ def transform_xlsx_to_mysql(file_path ,machine_type = "卷积式_v1" ,upload_dat
     project_name = Sample_Info["project_name"] if "project_name" in Sample_Info.columns else []
     collect_site = Sample_Info["collect_site"] if "collect_site" in Sample_Info.columns else []
 
+
     ## sheet of PD Sample
     pd_sample = pd.read_excel(file_path,sheet_name="PD Sample")
     
@@ -120,20 +248,20 @@ def transform_xlsx_to_mysql(file_path ,machine_type = "卷积式_v1" ,upload_dat
 
     ## sheet of Spectrum Sample
     spectrum_sample = pd.read_excel(file_path,sheet_name="Recon Sample")
+    raw_spectrum_sample_len = spectrum_sample.shape[0]
     if spectrum_sample.shape[0] == 0:
-        raw_spectrum_sample_len = spectrum_sample.shape[0]
         spectrum_sample = pd.DataFrame(None, index=range(pd_sample.shape[0]), columns=pd_sample.columns)
 
     ## sheet of Spectrum Source
     spectrum_source = pd.read_excel(file_path,sheet_name="Recon Source")
+    raw_spectrum_source_len = spectrum_source.shape[0]
     if spectrum_source.shape[0] == 0:
-        raw_spectrum_source_len = spectrum_source.shape[0]
         spectrum_source = pd.DataFrame(None, index=range(pd_sample.shape[0]), columns=pd_sample.columns)
 
     ## sheet of Spectrum Corrected
     spectrum_corrected = pd.read_excel(file_path,sheet_name="Corrected spectrum")
+    raw_spectrum_corrected_len = spectrum_corrected.shape[0]
     if spectrum_corrected.shape[0] == 0:
-        raw_spectrum_corrected_len = spectrum_corrected.shape[0]
         spectrum_corrected = pd.DataFrame(None, index=range(pd_sample.shape[0]), columns=pd_sample.columns)
     
     biomarks = pd.read_excel(file_path,sheet_name="Measured_Value")
@@ -144,6 +272,7 @@ def transform_xlsx_to_mysql(file_path ,machine_type = "卷积式_v1" ,upload_dat
 
     # Create DataFrame with file_name and created_time
     df = pd.DataFrame({
+        'file_name': file_name,
         'created_time': created_time,
         'volunteer': volunteer,
         'project_type': project_type,
@@ -482,6 +611,14 @@ def transform_xlsx_to_database(file_path ,machine_type = "样机_卷积式_v1" ,
 
 
 def get_wavelength_list(mechine_type:str = "FT"):
+    """返回光谱仪的波长列表
+
+    Args:
+        mechine_type: 光谱仪类型，可选值为"FT"或"FX"
+    Returns:
+        list: 光谱仪的波长列表
+    
+    """
     wavelength_dict_path =  os.path.join(os.path.dirname(__file__), "wavelength_dict.pkl")
 
     import pickle
@@ -2160,6 +2297,37 @@ class FileSync:
             print(f"同步过程中发生错误: {str(e)}")
 
 
+
+def repeat_values_to_csv(input_data, n_repeats, output_file='repeated_values.csv'):
+    """
+    将输入数据重复n遍并保存为CSV文件
+    
+    参数:
+        input_data: 输入数据,numpy数组或文本文件路径
+        n_repeats: 重复次数
+        output_file: 输出CSV文件名
+    """
+    # 如果输入是文件路径,则读取文件
+    if isinstance(input_data, str):
+        data = np.loadtxt(input_data)
+    else:
+        data = np.array(input_data)
+        
+    # 创建一个空列表来存储重复的数据
+    repeated_data = []
+    
+    # 对每一行重复n遍
+    for row in data:
+        for _ in range(n_repeats):
+            repeated_data.append(row)
+            
+    # 将重复后的数据转换为numpy数组
+    repeated_data = np.array(repeated_data)
+    
+    # 将数据保存为CSV文件
+    pd.DataFrame(repeated_data).to_csv(output_file, index=False, header=False)
+    
+    print(f"数据已成功重复{n_repeats}遍并保存为{output_file}")
 
 
 

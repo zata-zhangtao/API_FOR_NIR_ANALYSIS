@@ -5,8 +5,6 @@
 ## AnalysisClass
 
 ### Create_rec_task
-
-
 ####  SpectrumModelEvaluator  评估所有类重建的效果
 
 会在当前目录生成一个evaluation_results文件夹，里面包含了所有的评估结果
@@ -228,9 +226,26 @@ dataset_X = get_dataset_from_mysql(database='光谱数据库',table_name="复享
 }
 
 
+### repeat_values_to_csv 将一个numpy数组中的每个元素重复n遍，然后保存到csv中，用于样本重复测量，但是理化值只有一次而要对齐时
+
+args:
+    - input_data ：np.array
+    - n_repeats ： int
+    - output_file ： str
+```py
+# 示例数据
+data = np.array([
+    [2.1, 4.151],
+    [0.84, 1.762], 
+    [0.21, 0.49],
+    [1.68, 3.375]
+])
+# 调用函数重复数据3遍并保存
+repeat_values_to_csv(data, n_repeats=30)
+```
+
 
 ## utils
-
 ### train_model_for_trick_game_v2  自动机器学习，输出文档（ 根据输入的训练测试集数据进行训练和预测，然后输出评价函数的图表和对应的预测值的csv文件
 ![alt text](image/README/README.jpg)
 

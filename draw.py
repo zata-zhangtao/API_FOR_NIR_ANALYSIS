@@ -1467,27 +1467,216 @@ def plot_multiclass_line(data_name,X,y,save_dir=None):
     else:
         fig.show()
 
-if __name__ == '__main__':
 
 
-    # Assume each dataset has 100 observations
-    num_samples = 100
 
-    # Generating random data for training, validation, and testing
-    np.random.seed(0)
-    y_train = np.random.rand(num_samples)
-    y_train_pred = np.random.rand(num_samples)
-    y_val = np.random.rand(num_samples)
-    y_val_pred = np.random.rand(num_samples)
-    y_test = np.random.rand(num_samples)
-    y_test_pred = np.random.rand(num_samples)
+def plot_distribution(train_data, val_data, test_data, label_column = 'label'):
+    """
+    Plots the distribution of labels in training, validation, and test sets.
+
+    Parameters:
+    train_data (pd.DataFrame): Training dataset
+    val_data (pd.DataFrame): Validation dataset
+    test_data (pd.DataFrame): Test dataset
+    label_column (str): Name of the column containing labels
+    """
+    # Example usage:
+    #  plot_distribution(train_data, val_data, test_data, 'label')
+    plt.figure(figsize=(12, 6))
 
 
+    # Plotting Training set
+    plt.subplot(1, 3, 1)
+    plt.hist(train_data[label_column], bins=2, edgecolor='black')
+    plt.title('Training Set Distribution')
+    plt.xlabel('Label')
+    plt.ylabel('Frequency')
+
+    # Plotting Validation set
+    plt.subplot(1, 3, 2)
+    plt.hist(val_data[label_column], bins=2, edgecolor='black')
+    plt.title('Validation Set Distribution')
+    plt.xlabel('Label')
+    plt.ylabel('Frequency')
+
+    # Plotting Test set
+    plt.subplot(1, 3, 3)
+    plt.hist(test_data[label_column], bins=2, edgecolor='black')
+    plt.title('Test Set Distribution')
+    plt.xlabel('Label')
+    plt.ylabel('Frequency')
+
+    # Displaying the plots
+    plt.tight_layout()
+    plt.show()
+
+def plot_3d_pca_scatter(data, label_col='label', n_components=3):
+    """
+    使用PCA降维并绘制3D散点图
+    -----------
+    params:
+    -----------
+    data: pd.DataFrame, 包含特征和标签的数据集
+    label_col: str, 标签列的名称，默认 'label'
+    n_components: int, PCA降维的目标维度，默认 3
     
-    ####### example:
+    -----------
+    returns:
+    -----------
+    None: 直接展示3D散点图
+    """
+    from sklearn.decomposition import PCA
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
 
-    ###### analyze_model_performance
-    analyze_model_performance(y_train, y_train_pred, y_val, y_val_pred, y_test, y_test_pred)
+    # 提取特征和标签
+    X = data.drop(columns=[label_col])
+    y = data[label_col]
 
+    # 使用PCA进行降维
+    pca = PCA(n_components=n_components)
+    X_pca = pca.fit_transform(X)
 
+    # 绘制三维散点图
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
 
+    # 不同标签用不同颜色表示
+    scatter = ax.scatter(X_pca[:, 0], X_pca[:, 1], X_pca[:, 2], c=y, cmap='viridis', s=50)
+
+    # 添加颜色条
+    cbar = plt.colorbar(scatter)
+    cbar.set_label('Labels')
+
+    # 添加标题和坐标轴标签
+    ax.set_title('3D PCA Scatter Plot')
+    ax.set_xlabel('PCA Component 1')
+    ax.set_ylabel('PCA Component 2')
+    ax.set_zlabel('PCA Component 3')
+
+    # 显示图形
+    plt.show()
+
+def plot_3d_pca_combined(train_data, val_data, test_data, label_col='label', n_components=3):
+    """
+    Perform PCA on the combined train, validation, and test datasets, and plot them in a 3D scatter plot.
+    
+    Parameters:
+    ----------
+    train_data : pd.DataFrame
+        Training dataset including features and labels.
+    val_data : pd.DataFrame
+        Validation dataset including features and labels.
+    test_data : pd.DataFrame
+        Test dataset including features and labels.
+    label_col : str, optional
+        The name of the label column. Default is 'label'.
+    n_components : int, optional
+        The number of PCA components to reduce to. Default is 3.
+        
+    Returns:
+    -------
+    None
+        Displays the 3D scatter plot.
+    """
+    # Combine the datasets and drop the label column
+    combined_data = pd.concat([train_data, val_data, test_data], axis=0).drop(columns=[label_col])
+    
+    # Perform PCA to reduce the combined data to the specified number of components
+    pca = PCA(n_components=n_components)
+    pca_result = pca.fit_transform(combined_data)
+    
+    # Get the sizes of the train, validation, and test datasets
+    train_size = len(train_data)
+    val_size = len(val_data)
+    
+    # Split the PCA results back into the respective datasets
+    train_pca = pca_result[:train_size]
+    val_pca = pca_result[train_size:train_size + val_size]
+    test_pca = pca_result[train_size + val_size:]
+    
+    # Create a 3D scatter plot
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Plot train data
+    ax.scatter(train_pca[:, 0], train_pca[:, 1], train_pca[:, 2], c='blue', label='Train', alpha=0.6)
+
+    # Plot validation data
+    ax.scatter(val_pca[:, 0], val_pca[:, 1], val_pca[:, 2], c='green', label='Validation', alpha=0.6)
+
+    # Plot test data
+    ax.scatter(test_pca[:, 0], test_pca[:, 1], test_pca[:, 2], c='red', label='Test', alpha=0.6)
+
+    # Set axis labels and title
+    ax.set_xlabel('PCA 1')
+    ax.set_ylabel('PCA 2')
+    ax.set_zlabel('PCA 3')
+    ax.set_title('PCA 3D Visualization of Train, Validation, and Test Data')
+
+    # Add legend
+    ax.legend()
+
+    # Show the plot
+    plt.show()
+
+def plot_2d_pca_combined(train_data, val_data, test_data, label_col='label', n_components=2):
+    """
+    Perform PCA on the combined train, validation, and test datasets, and plot them in a 2D scatter plot.
+    
+    Parameters:
+    ----------
+    train_data : pd.DataFrame
+        Training dataset including features and labels.
+    val_data : pd.DataFrame
+        Validation dataset including features and labels.
+    test_data : pd.DataFrame
+        Test dataset including features and labels.
+    label_col : str, optional
+        The name of the label column. Default is 'label'.
+    n_components : int, optional
+        The number of PCA components to reduce to. Default is 2.
+        
+    Returns:
+    -------
+    None
+        Displays the 2D scatter plot.
+    """
+    # Combine the datasets and drop the label column
+    combined_data = pd.concat([train_data, val_data, test_data], axis=0).drop(columns=[label_col])
+    
+    # Perform PCA to reduce the combined data to the specified number of components
+    pca = PCA(n_components=n_components)
+    pca_result = pca.fit_transform(combined_data)
+    
+    # Get the sizes of the train, validation, and test datasets
+    train_size = len(train_data)
+    val_size = len(val_data)
+    
+    # Split the PCA results back into the respective datasets
+    train_pca = pca_result[:train_size]
+    val_pca = pca_result[train_size:train_size + val_size]
+    test_pca = pca_result[train_size + val_size:]
+    
+    # Create a 2D scatter plot
+    plt.figure(figsize=(10, 8))
+
+    # Plot train data
+    plt.scatter(train_pca[:, 0], train_pca[:, 1], c='blue', label='Train', alpha=0.6)
+
+    # Plot validation data
+    plt.scatter(val_pca[:, 0], val_pca[:, 1], c='green', label='Validation', alpha=0.6)
+
+    # Plot test data
+    plt.scatter(test_pca[:, 0], test_pca[:, 1], c='red', label='Test', alpha=0.6)
+
+    # Set axis labels and title
+    plt.xlabel('PCA 1')
+    plt.ylabel('PCA 2')
+    plt.title('PCA 2D Visualization of Train, Validation, and Test Data')
+
+    # Add legend
+    plt.legend()
+
+    # Show the plot
+    plt.show()

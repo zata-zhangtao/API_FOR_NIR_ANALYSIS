@@ -20,20 +20,20 @@ Functions:
     - spectral_reconstruction_train(PD_values, Spectra_values, epochs=50, lr=1e-3,save_dir = None):  光谱重建训练
 """
 import traceback  # 引入 traceback 模块
-from nirapi.draw import *
+from .draw import *
 from typing import Union
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score
 from sklearn.metrics import mean_squared_error
-from nirapi.ML_model import *
+from .ML_model import *
 from sklearn.preprocessing import MinMaxScaler
 import optuna
 from scipy.stats import pearsonr
 import matplotlib
 import optuna
-import nirapi.ML_model as AF
+from . import ML_model as AF
 import numpy as np
 from sklearn.metrics import mean_absolute_error, mean_squared_error,r2_score
 import random
@@ -43,7 +43,7 @@ import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from mpl_toolkits.mplot3d import Axes3D
 import datetime
-from nirapi.AnalysisClass.CreateTrainReport import CreateTrainReport
+from .AnalysisClass.CreateTrainReport import CreateTrainReport
 
 
 

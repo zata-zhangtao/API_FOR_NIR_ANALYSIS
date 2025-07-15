@@ -1,0 +1,17 @@
+numpy
+pandas
+scikit-learn
+scipy
+matplotlib
+seaborn
+plotly
+optuna
+pybaselines
+xgboost
+catboost
+lightgbm
+obspy
+tqdm
+requests
+pymysql
+joblib 

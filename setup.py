@@ -1,17 +1,54 @@
 # coding=utf-8
-from setuptools import setup
-from setuptools import find_packages
+from setuptools import setup, find_packages
+
+# Read the contents of README file
+with open("README.md", "r", encoding="utf-8") as fh:
+    long_description = fh.read()
 
 setup(
+    name="nirapi",
+    version="1.0.0",
     author="zata",
-    description="This is a nir analyse api, writen by zata",   ### 一句话概括一下
-    name="nirapi",   ### 给你的包取一个名字
-    version="1.0",   ### 你的包的版本号
-    packages=["nirapi", "nirapi/AnalysisClass"],
-    # packages=find_packages(),### 这里写的是需要从哪个文件夹下导入python包，如果找不到会报错，默认你下载下来解压之后的文件夹名就是API_FOR_NIR_ANALYSIS-master
+    description="A Near-Infrared Spectroscopy Analysis API",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    packages=find_packages(),
     package_data={
-        'nirapi': ['*'],  # 特定子文件夹中的所有文件
+        'nirapi': ['*.pkl'],  # Include pickle files
     },
-          exclude_package_date={'':['.gitignore'], '':['dist'], '':'build', '':'utility.egg.info'},    ### 这是需要排除的文件，也就是只把有用的python文件导入到环境变量中
-
+    include_package_data=True,
+    python_requires=">=3.8",
+    install_requires=[
+        "numpy",
+        "pandas",
+        "scikit-learn",
+        "scipy",
+        "matplotlib",
+        "seaborn",
+        "plotly",
+        "optuna",
+        "pybaselines",
+        "xgboost",
+        "catboost", 
+        "lightgbm",
+        "obspy",
+        "tqdm",
+        "requests",
+        "pymysql",
+        "joblib",
+    ],
+    classifiers=[
+        "Development Status :: 4 - Beta",
+        "Intended Audience :: Science/Research", 
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Topic :: Scientific/Engineering :: Chemistry",
+        "Topic :: Scientific/Engineering :: Information Analysis",
+    ],
+    keywords="NIR spectroscopy analysis machine-learning",
 )

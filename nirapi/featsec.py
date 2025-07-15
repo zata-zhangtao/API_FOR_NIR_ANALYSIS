@@ -1,4 +1,15 @@
-# feature select   #过滤法，嵌入法，包装法，
+"""
+Feature selection module for NIR spectroscopy.
+
+This module provides various feature selection methods including:
+- Filter methods (correlation-based, chi-squared, etc.)
+- Wrapper methods (recursive feature elimination, etc.)
+- Embedded methods (regularization-based, etc.)
+
+Classes:
+    - filter: Filter-based feature selection methods
+    - wrapper: Wrapper-based feature selection methods
+"""
 
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -7,6 +18,11 @@ from sklearn.feature_selection import chi2
 from sklearn.ensemble import RandomForestClassifier,RandomForestRegressor
 from sklearn.metrics import accuracy_score
 import optuna
+
+__all__ = [
+    'filter',
+    'wrapper'
+]
 class filter:
     def __init__(self,X_train,X_test,y_train,y_test):
         self.X_train = X_train

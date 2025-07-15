@@ -1,21 +1,26 @@
-############################################################################################################################################################################################
-############################################################################################################################################################################################
-############################################################################################################################################################################################
-# 首先是用于自动调参的代码
-############################################################################################################################################################################################
-# 为了方便自动调参，将一些常用的函数封装起来，方便调用，要求有统一的输入输出格式
+"""
+Machine Learning models and preprocessing functions for NIR spectroscopy.
+
+This module contains various preprocessing methods, feature selection algorithms,
+and machine learning models specifically designed for NIR spectroscopy analysis.
+
+Main categories:
+- Data preprocessing (normalization, centering, filtering)
+- Feature selection (CARS, SPA, correlation-based)
+- Regression models (PLSR, SVR, RF, etc.)
+- Classification models (SVM, RF, KNN, etc.)
+- Outlier detection and data splitting
+"""
+
 import copy
 import numpy as np
 import pandas as pd
-# import streamlit as st
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import KFold
 from scipy.spatial.distance import cdist
 from sklearn.model_selection import train_test_split
 from obspy.signal.detrend import polynomial
-import numpy as np
-from sklearn.cross_decomposition import PLSRegression
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
@@ -23,29 +28,91 @@ from sklearn.model_selection import cross_val_predict
 from scipy.signal import savgol_filter
 from pybaselines.whittaker import iarpls, airpls, derpsalsa
 from sklearn.linear_model import Lasso
-# 不做任何处理
+
+__all__ = [
+    # Utility functions
+    'return_inputs',
+    'mahalanobis',
+    'random_split',
+    'custom_train_test_split',
+    
+    # Preprocessing functions
+    'mean_centering',
+    'normalization',
+    'standardization',
+    'poly_detrend',
+    'remove_baseline',
+    'snv',
+    'savgol',
+    'rnv',
+    'msc',
+    'd1',
+    'd2',
+    'move_avg',
+    'baseline_iarpls',
+    'baseline_airpls',
+    'baseline_derpsalsa',
+    'remove_high_variance_and_normalize',
+    
+    # Feature selection
+    'random_select',
+    'cars',
+    'spa',
+    'corr_coefficient',
+    'anova',
+    'fipls',
+    'pca',
+    
+    # Regression models
+    'LR',
+    'SVR',
+    'PLSR',
+    'bayes',
+    'RFR',
+    'BayesianRidge',
+    'LassoRegression',
+    'GradientBoostingTreeRegression',
+    'XGBoostRegression',
+    'CatBoostRegression',
+    'MLPRegression',
+    'LightGBMRegression',
+    
+    # Classification models
+    'logr',
+    'SVM',
+    'DT',
+    'RandomForest',
+    'KNN',
+    'CustomNaiveBayes',
+    'GradientBoostingTree',
+    'XGBoost',
+    'LactateNet'
+]
+# No processing function - returns inputs unchanged
 def return_inputs(*args):
     return args
 
 
-
-
-
-# 前处理   要求输入为 X, y, **params  输出为 X_new, y_new
-def mahalanobis(X, y,threshold=95):
+# Preprocessing functions - require input as X, y, **params and output as X_new, y_new
+def mahalanobis(X, y, threshold=95):
     """
-    -----
-    param
-    -----
-    X: array-like, shape (n_samples, n_features)
-    y: array-like, shape (n_samples,)
-    threshold: int, default 95
-    -----
-    return
-    -----
-    mahal_x: array-like, shape (n_samples, n_features)
-    y: array-like, shape (n_samples,)
-    -----
+    Remove outliers using Mahalanobis distance.
+    
+    Parameters
+    ----------
+    X : array-like, shape (n_samples, n_features)
+        Input feature matrix
+    y : array-like, shape (n_samples,)
+        Target values
+    threshold : int, default=95
+        Percentile threshold for outlier detection
+        
+    Returns
+    -------
+    mahal_x : array-like, shape (n_samples, n_features)
+        Filtered feature matrix
+    y : array-like, shape (n_samples,)
+        Filtered target values
     """
 
     mahal_X = np.asarray(X)

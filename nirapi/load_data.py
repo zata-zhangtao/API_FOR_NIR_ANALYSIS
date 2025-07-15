@@ -55,36 +55,89 @@ Examples:
 
 # wavelengths = pd.read_csv(r"C:\Users\zata\AppData\Local\Programs\Python\Python310\Lib\site-packages\nirapi\Alcohol.csv").columns[:1899].values.astype("float")
 import pickle
+import os
+import time
+import json
+import datetime
+import functools
+import warnings
 from typing import Union
+
 import pandas as pd
 import numpy as np
-import os
-import datetime
 import joblib
 import requests
-import os
-from tqdm import tqdm
-import time
 import pymysql
-import json
-import functools
+from tqdm import tqdm
 
-# 定义数据库IP常量
+# Import configuration system
+from .config import db_config, email_config, get_database_connection_params
 
-if True:
-## 局域网
-    GUANGYIN_DATABASE_IP: str = '192.168.110.150'
-    GUANGYIN_DATABASE_PORT: int = 53306
-else:
-## 公网IP
-    GUANGYIN_DATABASE_IP: str = '47.121.138.184'
-    GUANGYIN_DATABASE_PORT: int = 1001
+# Legacy constants (deprecated - use environment variables instead)
+GUANGYIN_DATABASE_IP: str = db_config.guangyin_ip
+GUANGYIN_DATABASE_PORT: int = db_config.guangyin_port
 
-## 数据库连接设置
-MYSQL_HOST = GUANGYIN_DATABASE_IP
-MYSQL_PORT = GUANGYIN_DATABASE_PORT
-MYSQL_USER = 'root'
-MYSQL_PASSWORD = 'Guangyin88888888@'
+# Database connection settings (deprecated - use get_database_connection_params instead)
+MYSQL_HOST = db_config.host
+MYSQL_PORT = db_config.port
+MYSQL_USER = db_config.user
+MYSQL_PASSWORD = db_config.password
+
+__all__ = [
+    # Database operations
+    'create_connection_for_Guangyin_database',
+    'get_dataset_from_mysql_v2',
+    'get_dataset_from_mysql',
+    'get_data_from_mysql',
+    'insert_prototype_data_to_mysql',
+    'insert_spectrum_data_to_mysql',
+    'update_data_to_mysql',
+    
+    # Data loading and transformation
+    'load_prototype_data',
+    'load_prototype_data_v2',
+    'transform_xlsx_to_mysql',
+    'upload_to_spectrometer_db',
+    'transform_xlsx_to_database',
+    'add_XlsxData_to_GuangyinDatabase_v4',
+    'add_XlsxData_to_GuangyinDatabase',
+    'add_alcoholXlsxData_to_GuangyinDatabase',
+    
+    # Data splitting and time operations
+    'split_data_by_date',
+    'split_data_by_date_v2',
+    'split_date_time',
+    'sort_by_datetime',
+    'datetime_to_timestamp',
+    'get_date_time_array_for_train_val_test',
+    
+    # Model persistence
+    'save_model',
+    'load_model',
+    
+    # Wavelength and feature utilities
+    'get_wavelength_list',
+    'get_feat_index_accroding_wave',
+    'get_wave_accroding_feat_index',
+    'get_wave_list',
+    
+    # File utilities
+    'get_file_list_include_name',
+    'get_dataset_by_indices',
+    'load_alcohol_data_for_volunteer',
+    'Filter_from_prototype_data_by_volunteer',
+    'Merge_all_csv',
+    'Transforming_raw_xlsx_data_into_trainable_csv_data',
+    'save_dict_to_csv',
+    'load_dict_from_csv',
+    'repeat_values_to_csv',
+    
+    # Utilities
+    'cache_data',
+    'send_email_to_zhangtao',
+    'FileSync',
+    'update_spectrum_column'
+]
 
 #############################################################################################################################################################################################
 ######################################################   数据库的相关操作
@@ -676,53 +729,79 @@ def load_alcohol_data_for_volunteer(volunteer, condition):
     return data_list[0], data_list[1], data_list[2]
 
 
-def create_connection_for_Guangyin_database(database:str,host:str=GUANGYIN_DATABASE_IP, port:int=GUANGYIN_DATABASE_PORT, user:str='select_user1', password:str='select_user1',charset:str='utf8mb4',dict = False):
+def create_connection_for_Guangyin_database(
+    database: str, 
+    host: str = None, 
+    port: int = None, 
+    user: str = None, 
+    password: str = None,
+    charset: str = None,
+    dict: bool = False
+):
     """
-    创建与Guangyin数据库的连接。
-    -----
-    parameters:
-    -----
-    :param database: 数据库名称
-    :param host: 数据库主机地址
-    :param port: 数据库端口
-    :param user: 数据库用户名
-    :param password: 数据库密码
-    :param charset: 数据库字符集
-    :param dict: 是否返回字典形式的结果
-    :return: 数据库连接对象
+    Create a connection to the Guangyin database.
     
-    -----
-    example:
-    -----
-    create_connection_for_Guangyin_database(database='样机数据库',host='47.121.138.184', port= 1001, user='select_user1', password='select_user1',charset='utf8mb4')
-
+    Uses environment variables for secure credential management.
+    Set NIRAPI_DB_HOST, NIRAPI_DB_PORT, NIRAPI_DB_USER, NIRAPI_DB_PASSWORD
+    environment variables to configure database connection.
+    
+    Args:
+        database: Database name
+        host: Database host (uses env var NIRAPI_DB_HOST if not provided)
+        port: Database port (uses env var NIRAPI_DB_PORT if not provided)
+        user: Database user (uses env var NIRAPI_DB_USER if not provided)
+        password: Database password (uses env var NIRAPI_DB_PASSWORD if not provided)
+        charset: Database charset (defaults to utf8mb4)
+        dict: Whether to return dictionary-style cursor results
+    
+    Returns:
+        Database connection object or None if connection fails
+    
+    Example:
+        # Using environment variables (recommended)
+        conn = create_connection_for_Guangyin_database(database='samples_db')
+        
+        # With explicit parameters (legacy)
+        conn = create_connection_for_Guangyin_database(
+            database='samples_db',
+            host='localhost',
+            port=3306,
+            user='myuser',
+            password='mypass'
+        )
     """
 
+    # Get connection parameters with fallbacks to configuration
+    conn_params = get_database_connection_params(
+        database=database,
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+        charset=charset
+    )
+    
+    # Warn if using legacy hardcoded values
+    if host == GUANGYIN_DATABASE_IP or port == GUANGYIN_DATABASE_PORT:
+        warnings.warn(
+            "Using hardcoded database credentials is deprecated. "
+            "Please use environment variables for security.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+    
     try:
         if dict:
             connection = pymysql.connect(
-                host=host,  # 你的数据库主机地址
-                port=port,  # 你的数据库端口
-                user=user,  # 你的数据库用户名
-                password=password,  # 你的数据库密码
-                database=database,  # 你的数据库名
-                charset='utf8mb4',
+                **conn_params,
                 cursorclass=pymysql.cursors.DictCursor
             )
         else:
-            # 建立数据库连接
-            connection = pymysql.connect(
-                host=host,  # 你的数据库主机地址
-                port=port,  # 你的数据库端口
-                user=user,  # 你的数据库用户名
-                password=password,  # 你的数据库密码
-                database=database,  # 你的数据库名
-                charset='utf8mb4',
-                # cursorclass=pymysql.cursors.DictCursor
-            )
+            connection = pymysql.connect(**conn_params)
         return connection
     except pymysql.MySQLError as e:
-        print(f"数据库连接失败: {e}")
+        print(f"Database connection failed: {e}")
+        print("Please check your environment variables: NIRAPI_DB_HOST, NIRAPI_DB_PORT, NIRAPI_DB_USER, NIRAPI_DB_PASSWORD")
         return None
 
 def update_spectrum_column(connection:object,  machine_name:str, spectrum:list):
@@ -1993,15 +2072,23 @@ def send_email_to_zhangtao(content = "训练结束了",receivers = "1506739178@q
     from email.header import Header
     from email.mime.text import MIMEText
     def sendEmail(send_dict): 
-        # 第三方 SMTP 服务
-        mail_host = "smtp.163.com"      # SMTP服务器
-        mail_user = "18305509246@163.com"               # 用户名
-        mail_pass = "QDJUTEDFCRRTUBPY"            # 授权密码，非登录密码
+        # SMTP service configuration (uses environment variables for security)
+        mail_host = email_config.smtp_host
+        mail_user = email_config.email_user
+        mail_pass = email_config.email_password
         
-        sender ="18305509246@163.com"   # 发件人邮箱(最好写全, 不然会失败)
-        content = send_dict.content # 内容
-        sender = send_dict.sender #你的邮箱账号如:18305509246@163.com
-        receivers = send_dict.receivers #收件人邮箱
+        # Warn if using default/empty credentials
+        if not mail_user or not mail_pass:
+            warnings.warn(
+                "Email credentials not configured. Set NIRAPI_EMAIL_USER and NIRAPI_EMAIL_PASSWORD environment variables.",
+                UserWarning
+            )
+            return False
+        
+        sender = mail_user  # Sender email (from configuration)
+        content = send_dict.content  # Email content
+        sender = send_dict.sender  # Your email account
+        receivers = send_dict.receivers  # Recipient email
         title = send_dict.title # 主图
     
         message = MIMEText(content, 'plain', 'utf-8')  # 内容, 格式, 编码

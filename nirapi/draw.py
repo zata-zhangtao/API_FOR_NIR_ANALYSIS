@@ -1,73 +1,71 @@
-from typing import Union
-'''绘图模块包含了绘制光谱吸收图的函数
----------
+"""
+Visualization module for NIR spectroscopy analysis.
+
+This module contains functions for creating various plots and visualizations
+for spectral data analysis, including absorption plots, PCA visualizations,
+performance metrics plots, and model comparison charts.
+
 Functions:
----------  
-    - plotly_simple_chart(data, x_axis=None, x_tick_interval=100, x_title="Time", y_title="PD Sample Value", title="Sample Data Over Time", template="plotly_white", tick_angle=90) 
-    - analyze_model_performance(y_train, y_train_pred, y_val, y_val_pred, y_test, y_test_pred) 
-    - plot_actual_vs_predicted(X_axis_train, y_train, y_train_pred, X_axis_val, y_val, y_val_pred, X_axis_test, y_test, y_test_pred)
-    - plot_pca_with_class_distribution(X_train, X_val, X_test, y_train, y_val, y_test, n_components=3) 
-    - plot_mean(data_name,X_name,y_name, data_X, data_y, scale=True,draw_y=True, save_dir=None)  
-    - spectral_absorption(X,y,category="all_samples",wave = None,plt_show = False)
-    - Sample_spectral_ranking(X,y,class="all_samples")
-    - Numerical_distribution(ndarr,class="all_samples",feat_ = None)
-    - RankingMAE_and_Spearman_between_X_and_Y(X,y,class = "all_samples")
-    - Comparison_of_data_before_and_after(before_X,before_y,after_X,after_y,class = "all_samples")
-    - train_test_scatter(y_train,y_train_pred,y_test,y_test_pred,class = "all_samples")
-    - classification_report_plot(y_true,y_pred)
-    - train_and_test_pred_plot(y_train,y_test,y_pred_train,y_pred_test,data_name)
-    - train_val_and_test_pred_plot(y_train,y_val,y_test,y_pred_train,y_pred_val,y_pred_test, data_name="",save_dir=None,each_class_mae=True,content = "") 
-    - pred_plot(y_test,y_pred_test, data_name="",save_dir=None,each_class_mae=True,content = "") 
-    - plot_multiclass_line(data_name,X,y,save_dir=None)
+    - plotly_simple_chart: Create simple line charts with plotly
+    - analyze_model_performance: Automatic model performance analysis 
+    - plot_actual_vs_predicted: Plot train/val/test predictions
+    - plot_pca_with_class_distribution: PCA visualization with class distribution
+    - spectral_absorption: Plot spectral absorption data
+    - train_val_and_test_pred_plot: Comprehensive prediction plots
+    - pred_plot: Simple prediction vs actual plots
+    - And many more...
+"""
 
----------
-Example:
----------
-    - 使用plotly画简单折线图  plotly_simple_chart
-    - 自动判断任务类型并输出分析报告  analyze_model_performance
-    - 画训练集验证集测试集的图，横坐标我一般设置成时间顺序，也可以设置其他，可以画散点图或者是折线图    plot_actual_vs_predicted
-    - 画PCA降维图,传入训练集验证集和验证集  plot_pca_with_class_distribution
-    - 画数据集的均值变化图  plot_mean
-    - 画光谱吸收图  spectral_absorption
-    - 画光谱吸收排序图  Sample_spectral_ranking
-    - 画数值分布图  Numerical_distribution
-    - 画X和Y之间的排名MAE和spearman相关系数  RankingMAE_and_Spearman_between_X_and_Y
-    - 画数据处理前后的spearman图  Comparison_of_data_before_and_after
-    - 画训练集和测试集的散点图  train_test_scatter
-    - 画分类任务中的分类报告图  classification_report_plot
-    - 画回归任务中的散点图用plotly画  train_and_test_pred_plot
-    - 画训练验证测试集的散点图最好用在回归任务中  train_val_and_test_pred_plot
-    - 画真实值和预测值的散点图-只有一组数据集时候用  pred_plot
-    - 根据Y的值设置不同颜色画折线图  plot_multiclass_line
+from typing import Union
 
-
-    
-    
-
----------
-
-'''
-
-
+import numpy as np
 import pandas as pd
-from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.express as px
+import plotly.graph_objects as go
 from mpl_toolkits.mplot3d import Axes3D
-# 解决中文显示问题
-plt.rcParams['font.family'] = 'SimHei'  # 替换为你选择的字体
-plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+from sklearn.decomposition import PCA
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score, roc_curve, auc,
     mean_squared_error, mean_absolute_error, r2_score
 )
-import matplotlib.pyplot as plt
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-import seaborn as sns
-# wavelengths = pd.read_csv(r"C:\Users\zata\AppData\Local\Programs\Python\Python310\Lib\site-packages\nirapi\Alcohol.csv").columns[:1899].values.astype("float")
-# wavelengths = pd.read_csv(r"C:\Users\zata\A ppData\Local\Programs\Python\Python310\Lib\site-packages\nirapi\Alcohol.csv").columns[:1899].values.astype("float")
 from scipy.stats import pearsonr, spearmanr
+
+__all__ = [
+    'clarke_error_grid',
+    'plotly_simple_chart',
+    'analyze_model_performance',
+    'plot_actual_vs_predicted',
+    'plot_pca_with_class_distribution',
+    'matlplotlib_chinese_display_fix',
+    'plot_mean',
+    'spectral_absorption_v2',
+    'spectral_absorption',
+    'Sample_spectral_ranking',
+    'Numerical_distribution',
+    'RankingMAE_and_Spearman_between_X_and_Y',
+    'train_test_scatter',
+    'Comparison_of_data_before_and_after',
+    'Numerical_distribution_V2',
+    'classification_report_plot',
+    'train_and_test_pred_plot',
+    'train_val_and_test_pred_plot',
+    'pred_plot',
+    'plot_multiclass_line',
+    'plot_distribution',
+    'plot_3d_pca_scatter',
+    'plot_3d_pca_combined',
+    'plot_2d_pca_combined'
+]
+
+# Set font configuration for Chinese characters (optional)
+try:
+    plt.rcParams['font.family'] = 'SimHei'
+    plt.rcParams['axes.unicode_minus'] = False
+except:
+    # Fallback to default fonts if SimHei is not available
+    pass
 
 # 血糖的克拉克图
 def clarke_error_grid(reference, prediction):

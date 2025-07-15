@@ -1,13 +1,17 @@
-'''这个文件中的函数用来进行数据分析
-'''
+"""
+Spectral data analysis functions for NIR spectroscopy.
+
+This module provides functions for analyzing spectral data including
+outlier detection, PCA analysis, correlation analysis, and reporting.
+"""
+
 import numpy as np
-import plotly.graph_objs as go
-from scipy.stats import pearsonr, spearmanr
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import plotly.graph_objs as go
 from scipy import stats
+from scipy.stats import pearsonr, spearmanr
 from sklearn.preprocessing import StandardScaler
 from sklearn.covariance import EllipticEnvelope
 from sklearn.decomposition import PCA
@@ -17,10 +21,179 @@ from sklearn.cross_decomposition import PLSRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.svm import SVR
 from sklearn.linear_model import LinearRegression
-plt.rcParams['font.family'] = ['SimHei']
-plt.rcParams['axes.unicode_minus'] = False
 
-# 数据分析，导入固定的数据格式，随后返回分析的结果，可以把结果导入到ai中，让它生成总结
+# Set font configuration for Chinese characters (optional)
+try:
+    plt.rcParams['font.family'] = ['SimHei']
+    plt.rcParams['axes.unicode_minus'] = False
+except:
+    # Fallback to default fonts if SimHei is not available
+    pass
+
+
+__all__ = [
+    'analyze_spectral_data',
+    'load_spectral_data',
+    'print_basic_data_info',
+    'plot_spectral_overview', 
+    'detect_outliers',
+    'plot_detailed_spectral_analysis',
+    'analyze_correlations',
+    'plot_mean',
+    'plot_correlation_graph'
+]
+
+
+# === Comprehensive Spectral Data Analysis Functions ===
+# This module has been refactored to break down the monolithic analyze_spectral_data
+# function into smaller, focused components for better maintainability.
+
+
+def load_spectral_data(file_path: str) -> tuple:
+    """
+    Load spectral data from Excel file.
+    
+    Args:
+        file_path: Path to Excel file with 'data' and 'notes' sheets
+        
+    Returns:
+        Tuple of (data_df, info_df, X, y) where:
+        - data_df: Main data DataFrame
+        - info_df: Notes/remarks DataFrame  
+        - X: Feature matrix
+        - y: Target variable
+        
+    Raises:
+        FileNotFoundError: If the specified file does not exist
+        ValueError: If the file format is invalid or required sheets are missing
+        KeyError: If required columns are missing
+    """
+    import os
+    
+    # Input validation
+    if not isinstance(file_path, str):
+        raise TypeError("file_path must be a string")
+    
+    if not file_path.strip():
+        raise ValueError("file_path cannot be empty")
+    
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
+    
+    if not file_path.lower().endswith(('.xlsx', '.xls')):
+        raise ValueError("file_path must be an Excel file (.xlsx or .xls)")
+    
+    try:
+        # Try to load the required sheets
+        data_df = pd.read_excel(file_path, sheet_name='数据')
+        info_df = pd.read_excel(file_path, sheet_name='备注')
+    except Exception as e:
+        raise ValueError(f"Error reading Excel file: {str(e)}. Make sure the file contains '数据' and '备注' sheets.")
+    
+    # Validate data structure
+    if data_df.empty:
+        raise ValueError("Data sheet is empty")
+    
+    if data_df.shape[1] < 2:
+        raise ValueError("Data sheet must have at least 2 columns (features and target)")
+    
+    # Separate features (X) and target variable (y)
+    X = data_df.iloc[:, :-1]
+    y = data_df.iloc[:, -1]
+    
+    # Check for completely missing target values
+    if y.isnull().all():
+        raise ValueError("Target variable contains only missing values")
+    
+    return data_df, info_df, X, y
+
+
+def print_basic_data_info(data_df: pd.DataFrame, X: pd.DataFrame, y: pd.Series) -> None:
+    """
+    Print basic information about the dataset.
+    
+    Args:
+        data_df: Complete dataset
+        X: Feature matrix
+        y: Target variable
+        
+    Raises:
+        TypeError: If inputs are not the expected types
+        ValueError: If inputs are empty or invalid
+    """
+    # Input validation
+    if not isinstance(data_df, pd.DataFrame):
+        raise TypeError("data_df must be a pandas DataFrame")
+    
+    if not isinstance(X, pd.DataFrame):
+        raise TypeError("X must be a pandas DataFrame")
+    
+    if not isinstance(y, (pd.Series, pd.DataFrame)):
+        raise TypeError("y must be a pandas Series or DataFrame")
+    
+    if data_df.empty:
+        raise ValueError("data_df cannot be empty")
+    
+    if X.empty:
+        raise ValueError("X cannot be empty")
+    
+    if len(y) == 0:
+        raise ValueError("y cannot be empty")
+    
+    try:
+        print("="*50)
+        print("1. Basic Data Information")
+        print("="*50)
+        print(f"Data dimensions: {data_df.shape}")
+        print(f"\nNumber of features: {X.shape[1]}")
+        print("\nFirst 5 rows:")
+        print(data_df.head())
+        
+        # Data statistical description
+        print("\nData statistical description:")
+        print(data_df.describe())
+        
+        # Check missing values
+        print("\nMissing values count:")
+        print(data_df.isnull().sum())
+        
+    except Exception as e:
+        raise RuntimeError(f"Error printing data information: {str(e)}")
+
+
+def plot_spectral_overview(X: pd.DataFrame) -> None:
+    """
+    Plot spectral data overview including individual spectra and mean ± std.
+    
+    Args:
+        X: Feature matrix (spectral data)
+    """
+    # Plot spectral data
+    plt.figure(figsize=(12, 6))
+    for i in range(len(X)):
+        plt.plot(X.columns, X.iloc[i, :], alpha=0.1)
+    plt.title('Spectral Data Distribution')
+    plt.xlabel('Wavelength/Frequency')
+    plt.ylabel('Spectral Value')
+    plt.show()
+    
+    # Calculate and plot mean spectrum and standard deviation
+    mean_spectrum = X.mean()
+    std_spectrum = X.std()
+    
+    plt.figure(figsize=(12, 6))
+    plt.plot(X.columns.astype(float), mean_spectrum, 'b-', label='Mean Spectrum')
+    plt.fill_between(X.columns.astype(float), 
+                     mean_spectrum - 2*std_spectrum,
+                     mean_spectrum + 2*std_spectrum,
+                     alpha=0.3, label='±2σ Range')
+    plt.title('Average Spectrum with Standard Deviation')
+    plt.xlabel('Wavelength/Frequency')
+    plt.ylabel('Spectral Value')
+    plt.legend()
+    plt.show()
+
+
 def analyze_spectral_data(file_path):
     '''
     
@@ -175,9 +348,14 @@ def analyze_spectral_data(file_path):
     print("="*50)
 
     # 计算与目标变量的相关性
+    correlation_values = []
+    for col in X.columns:
+        corr_coef, _ = stats.pearsonr(X[col], y)
+        correlation_values.append(abs(corr_coef))
+    
     correlations = pd.DataFrame({
         '特征': X.columns,
-        '与目标变量的相关性': [abs(stats.pearsonr(X[col], y)[0]) for col in X.columns]
+        '与目标变量的相关性': correlation_values
     })
     correlations = correlations.sort_values('与目标变量的相关性', ascending=False)
 
@@ -186,14 +364,14 @@ def analyze_spectral_data(file_path):
 
     # 绘制所有特征的相关性折线图
     plt.figure(figsize=(12, 6))
-    plt.plot(X.columns.astype(float), [abs(stats.pearsonr(X[col], y)[0]) for col in X.columns], 'b-', label='相关性')
+    plt.plot(X.columns.astype(float), correlation_values, 'b-', label='相关性')
     
     # 找出极大值点
     from scipy.signal import find_peaks
     # 找出所有特征的极大值点
-    peaks, _ = find_peaks([abs(stats.pearsonr(X[col], y)[0]) for col in X.columns])
+    peaks, _ = find_peaks(correlation_values)
     peak_x = X.columns.astype(float).values[peaks]
-    peak_y = np.array([abs(stats.pearsonr(X[col], y)[0]) for col in X.columns])[peaks]
+    peak_y = np.array(correlation_values)[peaks]
     
     # 绘制极大值点
     # plt.scatter(peak_x, peak_y, 'ro', label='极大值点')
@@ -380,7 +558,8 @@ def analyze_spectral_data(file_path):
         
         # 在子图中绘制散点图
         axes[i].scatter(y_test, y_pred, alpha=0.5)
-        axes[i].plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2)
+        y_test_array = np.array(y_test)
+        axes[i].plot([y_test_array.min(), y_test_array.max()], [y_test_array.min(), y_test_array.max()], 'r--', lw=2)
         axes[i].set_xlabel('实际值')
         axes[i].set_ylabel('预测值')
         axes[i].set_title(f'{name}预测结果散点图')

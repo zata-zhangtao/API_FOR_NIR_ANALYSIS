@@ -1,24 +1,47 @@
-"""For data preprocessing
--------
-Functions:
-----------
-    - MC(X, axis=None) >> ndarray like X  # mean-centering
-    - normalization(X, axis=None) >> ndarray like X  # normalization
-    - remove_baseline_drift(X) >> ndarray like X  # remove baseline drift
-    - SNV(X) >> ndarray like X  # Standard Normal Variate (SNV)
-    - normalization(X, axis=None) >> ndarray like X  # normalization
-    - SG(X,window_length=14, polyorder=1,deriv = 0)
-    - MSC(X, mean_center=True, reference=None)
-    - weighted_SNV(X,weighed_martix = None,epsilon = 1e-5,Ns_times = 100,Nw_times = 100,draw_weighed_martix = False)
-    - RNV(X, percent=25)
-    
-
 """
+Data preprocessing functions for NIR spectroscopy.
 
+This module provides various preprocessing functions for spectral data including:
+- Outlier detection and removal
+- Normalization methods
+- Baseline correction
+- Standard Normal Variate (SNV) and variants
+- Multiplicative Scatter Correction (MSC)
+- Savitzky-Golay filtering
+- And more...
 
+Functions:
+    - MC: Mean-centering
+    - normalization: Min-max normalization
+    - remove_baseline_drift: Remove baseline drift
+    - SNV: Standard Normal Variate
+    - SG: Savitzky-Golay filter
+    - MSC: Multiplicative Scatter Correction
+    - weighted_SNV: Weighted SNV
+    - RNV: Robust Normal Variate
+    - remove_outliers: Remove outliers based on Z-score
+    - remove_top_20_percent_mahalanobis: Remove outliers using Mahalanobis distance
+    - airPLS: Adaptive iteratively reweighted penalized least squares
+    - VSN: Variance Scaling Normalization
+"""
 
 import numpy as np
 from scipy.spatial.distance import mahalanobis
+
+__all__ = [
+    'remove_top_20_percent_mahalanobis',
+    'remove_outliers',
+    'MC',
+    'normalization',
+    'remove_baseline_drift',
+    'VSN',
+    'SNV',
+    'weighted_SNV',
+    'RNV',
+    'SG',
+    'MSC',
+    'airPLS'
+]
 
 def remove_top_20_percent_mahalanobis(X):
     """

@@ -1,50 +1,84 @@
-"""一些小组件
---------
-Functions:
-----------
-    - PCA_LR_SVR_trian_and_eval(X,y,category = "all_samples",processed_X = None) >> None  # PCA+LR+SVR训练和评估
-    - RF_LR_SVR_trian_and_eval(X,y,category = "all_samples",processed_X = None) >> None  # RF+LR+SVR训练和评估
-    - NO_FS_LR_SVR_train_and_eval(X,y,category = "all_samples",processed_X = None) >> None  # 所有特征的LR+SVR训练和评估
-    - NO_FS_PLSR_train_and_eval(X,y,category = "all_sample",processed_X = None) >> None  # 所有特征的PLSR训练和评估
-    - Random_FS_LR_SVR_train_and_eval(X,y,category = "all_samples",processed_X = None,feat_size:Union[int,list] = None,samples_test_size = 0.33,epoch = 100) >> (LR_MAE_for_featsNum,SVR_MAE_for_featsNum)  # 随机选取特征，然后用LR和SVR训练和评估，返回每个特征数下的平均MAE，最大MAE，最小MAE
-    - Random_FS_PLSR_train_and_eval(X,y,category = "all_sample",processed_X = None,feat_size:Union[int,list] = 5,samples_test_size = 0.33,samples_random = True,epoch = 1000,max_MAE = 0.1,min_R2 = 0.5) >> None  # 随机选取特征，然后用PLSr训练和评估，返回每个特征数下的平均MAE，最大MAE，最小MAE,默认n—components = 3
-    - Auto_tuning_with_svr 输入数据和任务名字,进行svr模型训练和自动调参,输出调参过程的准确率
-    - Save_data_to_csv【class】 传入文件名和列,创建一个类，这个类支持输入数据，自动存储到文件中
-    - run_optuna 传入数据，自动进行调参， 方法是之前光谱分析streamlit自动化平台上的方法
-    - get_pythonFile_functions 传入python文件 返回文件中包含的所有函数字典
-    - run_regression_optuna(data_name,X,y,
-                        model='PLS',split = 'SPXY',test_size = 0.3, n_trials=200,object = None,cv = None,save_dir = None):
-                        传入数据，自动进行调参， 支持SVR,PLS
-    - PD_reduce_noise(PD_samples, PD_noise, ratio=9,base_noise= None):  传入样品和噪声PD,以及基础的噪声数值,样品数据减去PD数据得到减去噪声之后的样品数值
-    - SpectralReconstructor : 用于光谱重建的神经网络类，在spectral_reconstruction_train中被使用
-    - spectral_reconstruction_train(PD_values, Spectra_values, epochs=50, lr=1e-3,save_dir = None):  光谱重建训练
 """
-import traceback  # 引入 traceback 模块
-from .draw import *
-from typing import Union
-import pandas as pd
-import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score
-from sklearn.metrics import mean_squared_error
-from .ML_model import *
-from sklearn.preprocessing import MinMaxScaler
-import optuna
-from scipy.stats import pearsonr
-import matplotlib
-import optuna
-from . import ML_model as AF
-import numpy as np
-from sklearn.metrics import mean_absolute_error, mean_squared_error,r2_score
-import random
+Utility functions and classes for NIR spectroscopy analysis.
+
+This module provides a collection of utility functions for model training,
+evaluation, hyperparameter optimization, and other common tasks in NIR
+spectroscopy analysis. Many functions have been moved to specialized modules
+for better organization.
+
+For specific functionality, see:
+    - automl: Automated machine learning and hyperparameter optimization
+    - evaluation: Model training and evaluation utilities  
+    - wavelength: Wavelength and spectral band utilities
+    - reconstruction: Spectral reconstruction utilities
+    - file_utils: File operations and utility functions
+"""
+import traceback
 import warnings
 import time
+import datetime
+from typing import Union
+
+import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.decomposition import PCA
 from mpl_toolkits.mplot3d import Axes3D
-import datetime
+import optuna
+from scipy.stats import pearsonr
+
+# Import from refactored modules
+from .automl import *
+from .evaluation import *
+from .wavelength import *
+from .reconstruction import *
+from .file_utils import *
+from .draw import *
+from .ML_model import *
+from . import ML_model as AF
 from .AnalysisClass.CreateTrainReport import CreateTrainReport
 
+
+# Export all functions from sub-modules plus legacy functions in this file
+__all__ = [
+    # Legacy functions still in this file
+    'train_pred_with_bands',
+    
+    # Re-exported from sub-modules
+    # From automl module
+    'train_model_for_trick_game_v2',
+    'run_optuna_v5',
+    'rebuild_model_v2', 
+    'run_regression_optuna_v3',
+    'tpot_auto_tune',
+    
+    # From evaluation module
+    'PCA_LR_SVR_train_and_eval',
+    'RF_LR_SVR_train_and_eval',
+    'NO_FS_LR_SVR_train_and_eval',
+    'NO_FS_PLSR_train_and_eval',
+    'Random_FS_LR_SVR_train_and_eval',
+    'Random_FS_PLSR_train_and_eval',
+    'Random_FS_RFR_train_and_eval',
+    
+    # From wavelength module
+    'get_MZI_bands',
+    'get_wavelength_ranges',
+    'validate_wavelength_range',
+    
+    # From reconstruction module
+    'SpectralReconstructor',
+    'spectral_reconstruction_train',
+    'PD_reduce_noise',
+    
+    # From file_utils module
+    'get_pythonFile_functions',
+    'extract_function_info',
+    'validate_function_parameters'
+]
 
 
 

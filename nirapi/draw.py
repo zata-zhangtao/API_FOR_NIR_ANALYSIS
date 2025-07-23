@@ -61,7 +61,7 @@ __all__ = [
 
 # Set font configuration for Chinese characters (optional)
 try:
-    plt.rcParams['font.family'] = 'SimHei'
+    # plt.rcParams['font.family'] = 'SimHei'
     plt.rcParams['axes.unicode_minus'] = False
 except:
     # Fallback to default fonts if SimHei is not available

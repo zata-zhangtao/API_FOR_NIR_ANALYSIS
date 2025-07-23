@@ -92,17 +92,20 @@ __all__ = [
     'insert_prototype_data_to_mysql',
     'insert_spectrum_data_to_mysql',
     'update_data_to_mysql',
-    
+
     # Data loading and transformation
     'load_prototype_data',
     'load_prototype_data_v2',
+    'load_excel_data_with_cache',
+    'load_skin_color_ft_data',
+    'load_prototype_spectral_data',
     'transform_xlsx_to_mysql',
     'upload_to_spectrometer_db',
     'transform_xlsx_to_database',
     'add_XlsxData_to_GuangyinDatabase_v4',
     'add_XlsxData_to_GuangyinDatabase',
     'add_alcoholXlsxData_to_GuangyinDatabase',
-    
+
     # Data splitting and time operations
     'split_data_by_date',
     'split_data_by_date_v2',
@@ -110,17 +113,17 @@ __all__ = [
     'sort_by_datetime',
     'datetime_to_timestamp',
     'get_date_time_array_for_train_val_test',
-    
+
     # Model persistence
     'save_model',
     'load_model',
-    
+
     # Wavelength and feature utilities
     'get_wavelength_list',
     'get_feat_index_accroding_wave',
     'get_wave_accroding_feat_index',
     'get_wave_list',
-    
+
     # File utilities
     'get_file_list_include_name',
     'get_dataset_by_indices',
@@ -131,7 +134,7 @@ __all__ = [
     'save_dict_to_csv',
     'load_dict_from_csv',
     'repeat_values_to_csv',
-    
+
     # Utilities
     'cache_data',
     'send_email_to_zhangtao',
@@ -189,6 +192,282 @@ def cache_data(cache_path):
             return result
         return wrapper
     return decorator
+
+
+def load_excel_data_with_cache(
+    file_path: str,
+    sheet_configs: dict,
+    use_cache: bool = True,
+    cache_dir: str = "cache",
+    data_processors: dict = None,
+    verbose: bool = True
+) -> dict:
+    """
+    Generic function to load data from Excel files with caching support.
+
+    This function provides a flexible way to load data from Excel files with different
+    sheet configurations and data processing options, while supporting caching for
+    improved performance.
+
+    Args:
+        file_path (str): Path to the Excel file
+        sheet_configs (dict): Configuration for each sheet to load. Format:
+            {
+                'sheet_name': {
+                    'header': int or None,  # Header row (default: 0)
+                    'usecols': str or list,  # Columns to use (optional)
+                    'skiprows': int or list,  # Rows to skip (optional)
+                    'nrows': int,  # Number of rows to read (optional)
+                    'index_col': int or str,  # Column to use as index (optional)
+                    'transpose': bool,  # Whether to transpose the data (default: False)
+                    'slice_rows': tuple,  # (start, end) for row slicing after loading (optional)
+                    'slice_cols': tuple,  # (start, end) for column slicing after loading (optional)
+                }
+            }
+        use_cache (bool): Whether to use cached data if available (default: True)
+        cache_dir (str): Directory to store cache files (default: "cache")
+        data_processors (dict): Optional post-processing functions for each sheet. Format:
+            {
+                'sheet_name': function,  # Function that takes DataFrame and returns processed data
+            }
+        verbose (bool): Whether to print loading information (default: True)
+
+    Returns:
+        dict: Dictionary with sheet names as keys and loaded data as values
+
+    Examples:
+        # Example 1: Load skin color FT data
+        sheet_configs = {
+            '光谱': {
+                'header': None,
+                'transpose': True,
+                'slice_rows': (2, None)  # Skip first 2 rows after transpose
+            },
+            '理化值': {
+                'header': 0,
+                'slice_cols': (1, 6)  # Columns 1-5
+            }
+        }
+
+        def process_spectral_data(df):
+            # Convert to numeric and fill NaN with 0
+            return df.apply(pd.to_numeric, errors='coerce').fillna(0)
+
+        data_processors = {
+            '光谱': process_spectral_data
+        }
+
+        data = load_excel_data_with_cache(
+            'data.xlsx',
+            sheet_configs,
+            data_processors=data_processors
+        )
+
+        # Example 2: Load prototype data
+        sheet_configs = {
+            'PD Sample': {'header': 0},
+            'PD Source': {'header': 0},
+            'Measured_Value': {'header': 0, 'slice_cols': (1, None)}
+        }
+
+        data = load_excel_data_with_cache('prototype_data.xlsx', sheet_configs)
+    """
+    import os
+    import pickle
+
+    # Create cache filename based on the excel file path and configuration
+    os.makedirs(cache_dir, exist_ok=True)
+
+    # Create a hash of the configuration for cache filename
+    import hashlib
+    config_str = str(sorted(sheet_configs.items()))
+    config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8]
+
+    base_name = os.path.basename(file_path).replace('.xlsx', '').replace('.xls', '')
+    cache_file = os.path.join(cache_dir, f"{base_name}_{config_hash}_cache.pkl")
+
+    # Check if cache exists and is newer than the original file
+    if use_cache and os.path.exists(cache_file):
+        cache_time = os.path.getmtime(cache_file)
+        file_time = os.path.getmtime(file_path)
+
+        if cache_time > file_time:
+            if verbose:
+                print(f"Loading cached data from {cache_file}")
+            with open(cache_file, 'rb') as f:
+                return pickle.load(f)
+
+    # Load data from Excel file
+    if verbose:
+        print(f"Loading data from Excel file: {file_path}")
+
+    loaded_data = {}
+
+    for sheet_name, config in sheet_configs.items():
+        try:
+            # Extract pandas read_excel parameters
+            read_params = {
+                'io': file_path,
+                'sheet_name': sheet_name
+            }
+
+            # Add optional parameters if specified
+            for param in ['header', 'usecols', 'skiprows', 'nrows', 'index_col']:
+                if param in config:
+                    read_params[param] = config[param]
+
+            # Load the sheet
+            df = pd.read_excel(**read_params)
+
+            # Apply transpose if specified
+            if config.get('transpose', False):
+                df = df.T
+
+            # Apply row slicing if specified
+            if 'slice_rows' in config:
+                start, end = config['slice_rows']
+                df = df.iloc[start:end, :]
+
+            # Apply column slicing if specified
+            if 'slice_cols' in config:
+                start, end = config['slice_cols']
+                df = df.iloc[:, start:end]
+
+            # Apply data processor if specified
+            if data_processors and sheet_name in data_processors:
+                df = data_processors[sheet_name](df)
+
+            loaded_data[sheet_name] = df
+
+            if verbose:
+                print(f"Loaded sheet '{sheet_name}': shape {df.shape}")
+
+        except Exception as e:
+            print(f"Error loading sheet '{sheet_name}': {e}")
+            loaded_data[sheet_name] = None
+
+    # Cache the data
+    if use_cache:
+        if verbose:
+            print(f"Caching data to {cache_file}")
+        with open(cache_file, 'wb') as f:
+            pickle.dump(loaded_data, f)
+
+    return loaded_data
+
+
+def load_skin_color_ft_data(file_path: str, use_cache: bool = True, cache_dir: str = "cache") -> tuple:
+    """
+    Load skin color FT data from Excel file with caching support.
+
+    This is a specialized wrapper around load_excel_data_with_cache for skin color
+    FT spectroscopy data with the expected format.
+
+    Args:
+        file_path (str): Path to the Excel file
+        use_cache (bool): Whether to use cached data if available (default: True)
+        cache_dir (str): Directory to store cache files (default: "cache")
+
+    Returns:
+        tuple: (PD_sample, PD_source, biomarks) where:
+            - PD_sample: pd.DataFrame with spectral data (numeric, NaN filled with 0)
+            - PD_source: pd.DataFrame with source data (same as PD_sample)
+            - biomarks: pd.DataFrame with biomarker data (columns 1-5)
+
+    Example:
+        PD_sample, PD_source, biomarks = load_skin_color_ft_data('skin_data.xlsx')
+        print(f"Spectral data shape: {PD_sample.shape}")
+        print(f"Biomarks shape: {biomarks.shape}")
+    """
+    # Define sheet configurations for skin color FT data
+    sheet_configs = {
+        '光谱': {
+            'header': None,
+            'transpose': True,
+            'slice_rows': (2, None)  # Skip first 2 rows after transpose
+        },
+        '理化值': {
+            'header': 0,
+            'slice_cols': (1, 6)  # Columns 1-5 (index 1 to 6, exclusive)
+        }
+    }
+
+    # Define data processors
+    def process_spectral_data(df):
+        """Convert spectral data to numeric and fill NaN with 0"""
+        numeric_df = df.apply(pd.to_numeric, errors='coerce')
+        return numeric_df.fillna(0)
+
+    data_processors = {
+        '光谱': process_spectral_data
+    }
+
+    # Load data using the generic function
+    data = load_excel_data_with_cache(
+        file_path=file_path,
+        sheet_configs=sheet_configs,
+        use_cache=use_cache,
+        cache_dir=cache_dir,
+        data_processors=data_processors,
+        verbose=True
+    )
+
+    # Extract the specific data
+    PD_sample = data['光谱']
+    PD_source = PD_sample  # Same as PD_sample for FT data
+    biomarks = data['理化值']
+
+    # Print information about the loaded data
+    print(f"光谱数据形状: {PD_sample.shape}")
+    print(f"光谱数据类型: {PD_sample.dtypes.value_counts()}")
+
+    return PD_sample, PD_source, biomarks
+
+
+def load_prototype_spectral_data(file_path: str, use_cache: bool = True, cache_dir: str = "cache") -> dict:
+    """
+    Load prototype spectral data from Excel file with caching support.
+
+    This is a specialized wrapper around load_excel_data_with_cache for prototype
+    spectral data with the expected format.
+
+    Args:
+        file_path (str): Path to the Excel file
+        use_cache (bool): Whether to use cached data if available (default: True)
+        cache_dir (str): Directory to store cache files (default: "cache")
+
+    Returns:
+        dict: Dictionary containing all loaded sheets:
+            - 'PD Sample': pd.DataFrame with PD sample data
+            - 'PD Source': pd.DataFrame with PD source data
+            - 'Measured_Value': pd.DataFrame with measured values (excluding first column)
+
+    Example:
+        data = load_prototype_spectral_data('prototype_data.xlsx')
+        pd_sample = data['PD Sample']
+        measured_values = data['Measured_Value']
+    """
+    # Define sheet configurations for prototype data
+    sheet_configs = {
+        'PD Sample': {'header': 0},
+        'PD Source': {'header': 0},
+        'Measured_Value': {
+            'header': 0,
+            'slice_cols': (1, None)  # Exclude first column
+        }
+    }
+
+    # Load data using the generic function
+    data = load_excel_data_with_cache(
+        file_path=file_path,
+        sheet_configs=sheet_configs,
+        use_cache=use_cache,
+        cache_dir=cache_dir,
+        verbose=True
+    )
+
+    return data
+
 
 def get_dataset_from_mysql_v2( table_name:str, project_name:str, X_type:list,database='样机数据库', y_type:list=None, volunteer:str=None, start_time:str="1970-01-01 00:00:00", end_time:str="2100-01-01 00:00:00")->dict:
     ''' 从MySQL数据库中获取数据，返回一个字典，字典的键为X_type和y_type，值为对应的数组

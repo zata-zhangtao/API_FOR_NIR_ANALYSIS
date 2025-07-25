@@ -9,9 +9,10 @@ nirapi/
 ├── load_data      # 数据加载和数据库操作
 ├── preprocessing  # 数据预处理方法
 ├── ML_model      # 机器学习模型和算法
+├── automl        # 自动机器学习工具
 ├── draw          # 数据可视化功能
 ├── analysis      # 光谱数据分析工具
-├── utils         # 工具函数和自动机器学习
+├── utils         # 工具函数和实用工具
 └── AnalysisClass # 高级分析类和光谱重建
 ```
 
@@ -112,6 +113,22 @@ nirapi/
 - `run_optuna_v5()` - Optuna 优化
 - `get_MZI_bands()` - 获取 MZI 波段
 
+### 🤖 自动机器学习 (`automl`)
+
+基于 Optuna 的自动化机器学习工具。
+
+**主要功能:**
+- 自动超参数优化
+- 迭代性能改进
+- 多模型对比分析
+- TPOT 自动流水线
+
+**核心函数:**
+- `train_model_for_trick_game_v2()` - 迭代式自动机器学习
+- `run_optuna_v5()` - 高级 Optuna 优化
+- `run_regression_optuna_v3()` - 专用回归优化
+- `tpot_auto_tune()` - TPOT 自动调优
+
 ### 🏗️ 分析类 (`AnalysisClass`)
 
 高级分析功能和光谱重建方法。
@@ -161,7 +178,7 @@ draw.pred_plot(y_test, y_pred)
 
 ```python
 # 使用自动机器学习进行端到端分析
-from nirapi.utils import train_model_for_trick_game_v2
+from nirapi.automl import train_model_for_trick_game_v2
 
 result = train_model_for_trick_game_v2(
     splited_data=(X_train, X_test, y_train, y_test),
@@ -250,4 +267,5 @@ NIR API 设计为可扩展的架构：
 - [数据加载模块](load_data.md) - 详细了解数据加载功能
 - [预处理模块](preprocessing.md) - 学习数据预处理方法
 - [机器学习模块](ml_model.md) - 探索机器学习算法
+- [自动机器学习模块](automl.md) - 掌握自动化机器学习
 - [可视化模块](draw.md) - 掌握数据可视化技巧

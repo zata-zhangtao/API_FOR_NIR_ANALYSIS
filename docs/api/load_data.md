@@ -17,16 +17,15 @@ from nirapi.load_data import get_dataset_from_mysql, get_wavelength_list
 从 MySQL 数据库中获取光谱数据集。
 
 ```python
-def get_dataset_from_mysql(database, table_name, project_name, X_type,
-                          y_type=None, start_time="1970-01-01 00:00:00",
-                          end_time="2100-01-01 00:00:00", volunteer=None):
+def get_dataset_from_mysql(table_name, project_name, X_type, y_type=None,
+                          start_time="1970-01-01 00:00:00",
+                          end_time="2100-01-01 00:00:00", volunteer=None,
+                          database='样机数据库'):
     """
     从 MySQL 数据库中获取光谱数据集
 
     Parameters:
     -----------
-    database : str
-        数据库名称，如 '光谱数据库'
     table_name : str
         数据库表名，如 "卷积式_v1"
     project_name : str
@@ -41,6 +40,8 @@ def get_dataset_from_mysql(database, table_name, project_name, X_type,
         采集结束时间，默认 "2100-01-01 00:00:00"
     volunteer : str, optional
         志愿者名称，如 "张三"
+    database : str, optional
+        数据库名称，默认 '样机数据库'
 
     Returns:
     --------
@@ -54,26 +55,77 @@ def get_dataset_from_mysql(database, table_name, project_name, X_type,
 ```python
 # 基本用法
 dataset = load_data.get_dataset_from_mysql(
-    database='光谱数据库',
     table_name="卷积式_v1",
     project_name="血糖检测项目",
-    X_type=['光谱']
+    X_type=['光谱'],
+    database='样机数据库'
 )
 
 # 获取特定时间范围的数据
 dataset = load_data.get_dataset_from_mysql(
-    database='光谱数据库',
     table_name="复享光谱仪",
     project_name="多发光单收光探头血糖数据",
     X_type=['光谱', "采集日期", "志愿者"],
     y_type=['血糖值'],
     start_time="2024-01-01 00:00:00",
     end_time="2024-12-31 23:59:59",
-    volunteer="张三"
+    volunteer="张三",
+    database='样机数据库'
 )
 
 # 返回的数据结构
 print(dataset.keys())  # ['光谱', '采集日期', '志愿者', '血糖值']
+```
+
+### get_dataset_from_mysql_v2
+
+从 MySQL 数据库中获取光谱数据集的增强版本。
+
+```python
+def get_dataset_from_mysql_v2(table_name, project_name, X_type,
+                             database='样机数据库', y_type=None, volunteer=None,
+                             start_time="1970-01-01 00:00:00",
+                             end_time="2100-01-01 00:00:00"):
+    """
+    从 MySQL 数据库中获取光谱数据集 (v2版本)
+
+    Parameters:
+    -----------
+    table_name : str
+        数据库表名
+    project_name : str
+        项目名称
+    X_type : list
+        需要获取的特征类型
+    database : str, optional
+        数据库名称，默认 '样机数据库'
+    y_type : list, optional
+        需要获取的标签类型
+    volunteer : str, optional
+        志愿者名称
+    start_time : str, optional
+        采集开始时间
+    end_time : str, optional
+        采集结束时间
+
+    Returns:
+    --------
+    dict
+        包含光谱数据和标签的字典
+    """
+```
+
+**示例:**
+
+```python
+# 使用 v2 版本获取数据
+dataset = load_data.get_dataset_from_mysql_v2(
+    table_name="复享光谱仪",
+    project_name="多发光单收光探头血糖数据",
+    X_type=['光谱', "采集日期", "志愿者"],
+    y_type=['实测值'],
+    database='样机数据库'
+)
 ```
 
 ### transform_xlsx_to_mysql
@@ -126,14 +178,14 @@ df = load_data.transform_xlsx_to_mysql(
 获取商用光谱仪的波长列表。
 
 ```python
-def get_wavelength_list(machine_type):
+def get_wavelength_list(mechine_type="FT"):
     """
     获取商用光谱仪的波长列表
 
     Parameters:
     -----------
-    machine_type : str
-        光谱仪类型，支持 "FT" 和 "FX"
+    mechine_type : str, optional
+        光谱仪类型，支持 "FT" 和 "FX"，默认 "FT"
 
     Returns:
     --------
@@ -243,7 +295,9 @@ X_train, X_val, X_test, y_train, y_val, y_test = load_data.split_data_by_date(
     X=spectral_data,
     y=target_values,
     date_time=timestamps,
-    split_points=['2024-09-27 23:59:59', '2024-09-29 23:59:59']
+    timestamp_split_point=['2024-09-27 23:59:59', '2024-09-29 23:59:59'],
+    start_timestamp='1970-09-21 00:00:00',
+    end_timestamp='2099-12-11 23:59:59'
 )
 ```
 
@@ -271,6 +325,59 @@ load_data.repeat_values_to_csv(
     input_data=data,
     n_repeats=30,
     output_file="repeated_data.csv"
+)
+```
+
+## 缓存数据加载
+
+### load_excel_data_with_cache
+
+从 Excel 文件中加载数据，支持缓存功能。
+
+```python
+def load_excel_data_with_cache(file_path, sheet_configs, use_cache=True,
+                              cache_dir="cache", data_processors=None,
+                              verbose=True):
+    """
+    从 Excel 文件中加载数据，支持缓存功能
+
+    Parameters:
+    -----------
+    file_path : str
+        Excel 文件路径
+    sheet_configs : dict
+        工作表配置字典
+    use_cache : bool, optional
+        是否使用缓存，默认 True
+    cache_dir : str, optional
+        缓存目录，默认 "cache"
+    data_processors : dict, optional
+        数据处理器字典
+    verbose : bool, optional
+        是否显示详细信息，默认 True
+
+    Returns:
+    --------
+    dict
+        加载的数据字典
+    """
+```
+
+**示例:**
+
+```python
+# 配置工作表加载参数
+sheet_configs = {
+    'Sheet1': {'header': 0, 'usecols': [0, 1, 2]},
+    'Sheet2': {'header': 1, 'usecols': 'A:E'}
+}
+
+# 加载带缓存的 Excel 数据
+data = load_data.load_excel_data_with_cache(
+    file_path="data/spectral_data.xlsx",
+    sheet_configs=sheet_configs,
+    use_cache=True,
+    cache_dir="cache"
 )
 ```
 
@@ -321,7 +428,7 @@ DATABASE_CONFIG = {
     'host': 'your_host',
     'user': 'your_username', 
     'password': 'your_password',
-    'database': '光谱数据库',
+    'database': '样机数据库',  # 默认数据库
     'charset': 'utf8mb4'
 }
 ```
@@ -340,10 +447,10 @@ DATABASE_CONFIG = {
 ```python
 try:
     dataset = load_data.get_dataset_from_mysql(
-        database='光谱数据库',
         table_name="不存在的表",
         project_name="测试项目",
-        X_type=['光谱']
+        X_type=['光谱'],
+        database='样机数据库'
     )
 except Exception as e:
     print(f"数据库操作失败: {e}")

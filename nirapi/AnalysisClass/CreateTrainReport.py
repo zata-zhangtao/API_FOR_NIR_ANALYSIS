@@ -245,7 +245,7 @@ class CreateTrainReport:
             os.makedirs(output_dir)
         self.output_pdf_path = output_pdf_path
         self.pdf = PdfPages(output_pdf_path)
-        from nirapi.utils import run_optuna_v5,rebuild_model_v2
+        from ..utils import run_optuna_v5,rebuild_model_v2
     def analyze_data(self, 
                     data_dict: Dict, 
                     train_key: str = 'train',
@@ -266,16 +266,16 @@ class CreateTrainReport:
         """
         # 数据验证
         if not data_dict:
-            raise ValueError("数据字典不能为空")
+            raise ValueError("data_dict cannot be empty")
         if train_key not in data_dict:
-            raise ValueError(f"关键字 {train_key} 不在数据集中")
+            raise ValueError(f"keywords {train_key} is not in the data set")
             
             
         # 准备训练数据
         data_dict_train = data_dict.copy()
         if test_key in data_dict:
             data_dict_train.pop(test_key, None)
-            print(f"测试数据 {test_key} 已从数据集中移除")
+            print(f"test data {test_key} has been removed from the data set")
         if exclude_date:
             if isinstance(exclude_date, str):
                 exclude_date = [exclude_date]
@@ -286,7 +286,7 @@ class CreateTrainReport:
         now = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
         # try:
         if True:
-            from nirapi.utils import run_optuna_v5
+            from ..utils import run_optuna_v5
             print(kw)
             results = run_optuna_v5(
                 data_dict_train, 
@@ -440,7 +440,7 @@ class CreateTrainReport:
         """
         splited_data = (data_dict[train_data][0],data_dict[test_data][0],data_dict[train_data][1],data_dict[test_data][1])
         # 获取测试集结果
-        from nirapi.utils import rebuild_model_v2
+        from ..utils import rebuild_model_v2
         y_test, y_pred = rebuild_model_v2(splited_data=splited_data,params_dict=results['best_selection_steps'])
         
         # 获取训练集结果
@@ -490,15 +490,15 @@ class CreateTrainReport:
         """
         绘制测试集的折线图
         Args:
-            y_test: 真实值
-            y_pred: 预测值
+            y_test: true value
+            y_pred: predicted value
         """
         plt.figure(figsize=(12, 8))
         
         # 绘制真实值和预测值的折线
         x = np.arange(len(y_test))
-        plt.plot(x, y_test, 'b-', label='真实值', alpha=0.6)
-        plt.plot(x, y_pred, 'r--', label='预测值', alpha=0.6)
+        plt.plot(x, y_test, 'b-', label='true value', alpha=0.6)
+        plt.plot(x, y_pred, 'r--', label='predicted value', alpha=0.6)
         
         # 计算评估指标
         from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
@@ -512,9 +512,9 @@ class CreateTrainReport:
         plt.text(0.05, 0.95, textstr, transform=plt.gca().transAxes, fontsize=10,
                 verticalalignment='top', bbox=props)
         
-        plt.xlabel('样本序号')
-        plt.ylabel('值')
-        plt.title('测试集预测结果')
+        plt.xlabel('sample index')
+        plt.ylabel('value')
+        plt.title('test set prediction results')
         plt.legend()
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
@@ -551,8 +551,8 @@ class CreateTrainReport:
                         bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.5),
                         arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'))
         
-        plt.xlabel('真实值')
-        plt.ylabel('绝对误差')
+        plt.xlabel('true value')
+        plt.ylabel('absolute error')
         plt.title(title)
         plt.legend()
         plt.grid(True, alpha=0.3)
@@ -620,7 +620,7 @@ class CreateTrainReport:
                 if isinstance(value, list):  # 处理列表类型的值
                     formatted_text.append(f"{key}:")
                     if len(value) >= 2:  # 确保value至少有两个元素
-                        formatted_text.append(f"  方法: {value[0]}")
+                        formatted_text.append(f"  method: {value[0]}")
                         if isinstance(value[1], dict):  # 如果第二个元素是字典
                             for param_key, param_value in value[1].items():
                                 formatted_text.append(f"    {param_key}: {param_value}")

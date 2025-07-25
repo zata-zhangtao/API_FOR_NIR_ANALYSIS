@@ -424,14 +424,14 @@ def train_model_for_trick_game_v2(max_attempts = 10,splited_data:tuple=None, X=N
             the filename of the report
         - kw : dict
             the keyword arguments
-            - selected_outlier : list ["不做异常值去除", "mahalanobis"]
-            - selected_preprocess : list ["不做预处理", "mean_centering", "normalization", "standardization", 
+            - selected_outlier : list ["no_outlier_removal", "mahalanobis"]
+            - selected_preprocess : list ["no_preprocessing", "mean_centering", "normalization", "standardization", 
                          "poly_detrend", "snv", "savgol", "msc","d1", "d2", "rnv", "move_avg"]
             - preprocess_number_input : int
-            - selected_feat_sec : list ["不做特征选择","corr_coefficient","anova","remove_high_variance_and_normalize","random_select"]
-            - selected_dim_red : list ["不做降维","pca"]    
-            - selected_model : list ["LR", "SVR", "PLSR", "Bayes(贝叶斯回归)", "RFR(随机森林回归)", "BayesianRidge"] or ["LogisticRegression", "SVM", "DT", "RandomForest", "KNN", 
-                        'Bayes(贝叶斯分类)', "GradientBoostingTree", "XGBoost"]
+            - selected_feat_sec : list ["no_feature_selection","corr_coefficient","anova","remove_high_variance_and_normalize","random_select"]
+            - selected_dim_red : list ["no_dimensionality_reduction","pca"]    
+            - selected_model : list ["LR", "SVR", "PLSR", "Bayes(Bayesian Regression)", "RFR(Random Forest Regression)", "BayesianRidge"] or ["LogisticRegression", "SVM", "DT", "RandomForest", "KNN", 
+                        'Bayes(Bayesian Classification)', "GradientBoostingTree", "XGBoost"]
     -----
     Returns:
     -----
@@ -451,7 +451,7 @@ def train_model_for_trick_game_v2(max_attempts = 10,splited_data:tuple=None, X=N
 
         X_train, X_test, y_train, y_test = train_test_split(Spectrumes, Lactate, test_size=0.34, random_state=42)
         kw = {
-        "selected_outlier" :     ["不做异常值去除"],
+        "selected_outlier" :     ["no_outlier_removal"],
         "selected_preprocess" :  [ "move_avg"],
         "preprocess_number_input" : 1,
         "selected_feat_sec" : ["remove_high_variance_and_normalize"],
@@ -1545,7 +1545,7 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
 
     # 验证输入数据
     if train_key not in data_dict:
-        raise KeyError(f"训练数据集键值 {train_key} 不在数据字典中")
+        raise KeyError(f"training data set key value {train_key} is not in the data dictionary")
 
     X_train_orig, y_train_orig = data_dict[train_key]
     
@@ -1554,12 +1554,12 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
     results_by_dataset = {}
 
     # 设置默认参数
-    selected_outlier = ["不做异常值去除", "mahalanobis"]
-    selected_preprocess = ["不做预处理", "mean_centering", "normalization", "standardization", 
+    selected_outlier = ["no_outlier_removal", "mahalanobis"]
+    selected_preprocess = ["no_preprocessing", "mean_centering", "normalization", "standardization", 
                          "poly_detrend", "snv", "savgol", "msc","d1", "d2", "rnv", "move_avg"]
     preprocess_number_input = kw.get("preprocess_number_input",1)
-    selected_feat_sec = ["不做特征选择","corr_coefficient","anova","remove_high_variance_and_normalize","random_select"]
-    selected_dim_red = ["不做降维","pca"]
+    selected_feat_sec = ["no_feature_selection","corr_coefficient","anova","remove_high_variance_and_normalize","random_select"]
+    selected_dim_red = ["no_dimensionality_reduction","pca"]
 
     # 更新参数（如果在kw中提供）
     if "selected_outlier" in kw: selected_outlier = kw["selected_outlier"]
@@ -1569,10 +1569,10 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
     
     # 设置模型选项
     if isReg:
-        model_options = ['LR', 'SVR', 'PLSR', 'Bayes(贝叶斯回归)', 'RFR(随机森林回归)', 'BayesianRidge']
+        model_options = ['LR', 'SVR', 'PLSR', 'Bayes(Bayesian Regression)', 'RFR(Random Forest Regression)', 'BayesianRidge']
     else:
         model_options = ['LogisticRegression', 'SVM', 'DT', 'RandomForest', 'KNN', 
-                        'Bayes(贝叶斯分类)', "GradientBoostingTree", "XGBoost"]
+                        'Bayes(Bayesian Classification)', "GradientBoostingTree", "XGBoost"]
 
     if "selected_model" in kw:
         model_options = kw["selected_model"]
@@ -1586,7 +1586,7 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
         # 预处理流程
         functions_ = {
             'Pretreatment': {
-                '不做异常值去除': [AF.return_inputs, {}],
+                'no_outlier_removal': [AF.return_inputs, {}],
                 'mahalanobis':
                     [AF.mahalanobis, {'threshold': trial.suggest_int('mahalanobis_threshold', 1, 100)}],
             },
@@ -1597,7 +1597,7 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
                                                                             'method': trial.suggest_categorical('custom_train_test_split_method', ['KS', 'SPXY'])}],
                             },
             'Preprocess': {
-                '不做预处理': [AF.return_inputs, {}],
+                'no_preprocessing': [AF.return_inputs, {}],
                 'mean_centering': [AF.mean_centering, {'axis':trial.suggest_categorical('mean_centering_axis',[None,0,1])}],
                 'normalization': [AF.normalization,
                                     {'axis': trial.suggest_categorical('normalization_axis', [None,0,1])}],
@@ -1621,7 +1621,7 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
 
             },
             "Feature_Selection": {
-                '不做特征选择': [AF.return_inputs, {}],
+                'no_feature_selection': [AF.return_inputs, {}],
                 'cars': [AF.cars, {'n_sample_runs': trial.suggest_int('cars_n_sample_runs', 10, 1000),
                                     'pls_components': trial.suggest_int('cars_pls_components', 1, 20),
                                     'n_cv_folds': trial.suggest_int('cars_n_cv_folds', 1, 10)}],
@@ -1641,7 +1641,7 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
             },
 
             'Dimensionality_reduction': {
-                '不做降维': [AF.return_inputs, {}],
+                'no_dimensionality_reduction': [AF.return_inputs, {}],
                 'pca': [AF.pca, {'n_components': trial.suggest_int('pca_n_components', 1, 50)}],
                 # 'remove_high_variance_and_normalize':[AF.remove_high_variance_and_normalize, {'remove_feat_ratio': trial.suggest_float('remove_high_variance_and_normalize_remove_feat_ratio', 0.01, 0.5)}]
             },
@@ -1657,7 +1657,7 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
                                 'gamma': trial.suggest_float("SVR_gamma", 1e-5, 1000, log=True)}],
                 'PLSR': [AF.PLSR, {
                                     'scale': trial.suggest_categorical('PLSR_scale', [True, False])}],
-                'Bayes(贝叶斯回归)': [AF.bayes, {
+                'Bayes(Bayesian Regression)': [AF.bayes, {
                                                     'tol': trial.suggest_float('Bayes(贝叶斯回归)_tol', 0.0001, 0.1),
                                                     'alpha_1': trial.suggest_float('Bayes(贝叶斯回归)_alpha_1', 0.0001, 0.1),
                                                     'alpha_2': trial.suggest_float('Bayes(贝叶斯回归)_alpha_2', 0.0001, 0.1),
@@ -1665,7 +1665,7 @@ def run_optuna_v5(data_dict, train_key, isReg, chose_n_trails, selected_metric='
                                                     'lambda_2': trial.suggest_float('Bayes(贝叶斯回归)_lambda_2', 0.0001, 0.1),
                                                     'compute_score': trial.suggest_categorical('Bayes(贝叶斯回归)_compute_score', [True, False]),
                                                     'fit_intercept': trial.suggest_categorical('Bayes(贝叶斯回归)_fit_intercept', [True, False])}],
-                'RFR(随机森林回归)': [AF.RFR, {'n_estimators': trial.suggest_int('RFR(随机森林回归)_n_estimators', 1, 100),
+                'RFR(Random Forest Regression)': [AF.RFR, {'n_estimators': trial.suggest_int('RFR(随机森林回归)_n_estimators', 1, 100),
                                                 'criterion': trial.suggest_categorical('RFR(随机森林回归)_criterion', ["squared_error", "absolute_error", "friedman_mse", "poisson"]),
                                                 # 'max_depth': trial.suggest_int('RFR(随机森林回归)_max_depth', 1, 100),
                                                 'min_samples_split': trial.suggest_float('RFR(随机森林回归)_min_samples_split', 0.0, 1.0),
@@ -2007,7 +2007,7 @@ def rebuild_model_v2(splited_data=None, params_dict:dict=None):
     # params_dict = results['best_selection_steps']
     params_dict = {
             "outlier": [
-                "不做异常值去除",
+                "no_outlier_removal",
                 {}
             ],
             "preprocess": [
@@ -2025,15 +2025,15 @@ def rebuild_model_v2(splited_data=None, params_dict:dict=None):
                 ]
             ],
             "feature_selection": [
-                "不做特征选择",
+                "no_feature_selection",
                 {}
             ],
             "dimensionality_reduction": [
-                "不做降维",
+                "no_dimensionality_reduction",
                 {}
             ],
             "model": [
-                "RFR(随机森林回归)",
+                "RFR(Random Forest Regression)",
                 {
                     "n_estimators": 5,
                     "criterion": "friedman_mse",
@@ -2051,7 +2051,7 @@ def rebuild_model_v2(splited_data=None, params_dict:dict=None):
 
     functions_ = {
             'Pretreatment': {
-                '不做异常值去除': [AF.return_inputs, {}],
+                'no_outlier_removal': [AF.return_inputs, {}],
                 'mahalanobis':
                     [AF.mahalanobis, ],
             },
@@ -2060,7 +2060,7 @@ def rebuild_model_v2(splited_data=None, params_dict:dict=None):
                 'custom_train_test_split':[AF.custom_train_test_split ],
                             },
             'Preprocess': {
-                '不做预处理': [AF.return_inputs, {}],
+                'no_preprocessing': [AF.return_inputs, {}],
                 'mean_centering': [AF.mean_centering, {}],
                 'normalization': [AF.normalization,
                                     {}],
@@ -2080,7 +2080,7 @@ def rebuild_model_v2(splited_data=None, params_dict:dict=None):
 
             },
             "Feature_Selection": {
-                '不做特征选择': [AF.return_inputs, {}],
+                'no_feature_selection': [AF.return_inputs, {}],
                 'cars': [AF.cars, {}],
                 'spa': [AF.spa, {}],
                 'corr_coefficient': [AF.corr_coefficient, {}],
@@ -2092,7 +2092,7 @@ def rebuild_model_v2(splited_data=None, params_dict:dict=None):
             },
 
             'Dimensionality_reduction': {
-                '不做降维': [AF.return_inputs, {}],
+                'no_dimensionality_reduction': [AF.return_inputs, {}],
                 'pca': [AF.pca, {}],
                 'remove_high_variance_and_normalize': [AF.remove_high_variance_and_normalize, {}],
             },
@@ -2103,8 +2103,8 @@ def rebuild_model_v2(splited_data=None, params_dict:dict=None):
                 'SVR': [AF.SVR,
                             {}],
                 'PLSR': [AF.PLSR, {}],
-                'Bayes(贝叶斯回归)': [AF.bayes, {}],
-                'RFR(随机森林回归)': [AF.RFR, {}],
+                'Bayes(Bayesian Regression)': [AF.bayes, {}],
+                'RFR(Random Forest Regression)': [AF.RFR, {}],
                 'BayesianRidge': [AF.BayesianRidge, {}],
                 'LactateNet': [AF.LactateNet, {}],
                 'LassoRegression': [AF.LassoRegression, {}],
@@ -2120,7 +2120,7 @@ def rebuild_model_v2(splited_data=None, params_dict:dict=None):
                 'DT': [AF.DT, {}],
                 'RandomForest': [AF.RandomForest, {}],
                 'KNN': [AF.KNN, {}],
-                'Bayes(贝叶斯分类)': [
+                'Bayes(Bayesian Classification)': [
                     AF.CustomNaiveBayes, {}],
                 'GradientBoostingTree': [AF.GradientBoostingTree, {}],
                 'XGBoost': [AF.XGBoost, {}],

@@ -71,6 +71,7 @@ nav:
   - 快速开始: getting-started.md
   - API 参考:
     - 概览: api/overview.md
+    - 自动机器学习: api/automl.md
     - 数据加载: api/load_data.md
     - 数据预处理: api/preprocessing.md
     - 机器学习模型: api/ml_model.md

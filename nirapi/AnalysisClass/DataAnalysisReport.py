@@ -1436,7 +1436,7 @@ class SpectralAnalysisReport:
         # 准备数据
         chemical_features = {}
         for key, value in self.dataset.items():
-            if key != '光谱' and value.dtype.kind in 'iufc':
+            if key != 'spectra' and value.dtype.kind in 'iufc':
                 chemical_features[key] = value
         
         if chemical_features:

@@ -40,7 +40,6 @@ __all__ = [
     'plot_pca_with_class_distribution',
     'matlplotlib_chinese_display_fix',
     'plot_mean',
-    'spectral_absorption_v2',
     'spectral_absorption',
     'Sample_spectral_ranking',
     'Numerical_distribution',
@@ -603,7 +602,7 @@ def plot_mean( data_X, data_y = None,data_name = '',X_name ='强度',y_name="理
     else:
         fig.write_image( save_dir+ f'/{data_name}.png',width=1800, height=1200)
 
-def spectral_absorption_v2(X,y = None,category="all_samples",wave = None,plt_show = False):
+def spectral_absorption(X,y = None,category="all_samples",wave = None,plt_show = False):
     '''画光谱吸收图
     -------
     Parameters:
@@ -699,71 +698,6 @@ def spectral_absorption_v2(X,y = None,category="all_samples",wave = None,plt_sho
     )
     fig.show()
 
-def spectral_absorption(X,y = None,category="all_samples",wave = None,plt_show = False):
-    '''画光谱吸收图
-    -------
-    Parameters:
-    ---------
-        - X : ndarray 光谱数据 shape of (n_samples,n_features)
-        - y : ndarray 物质含量
-        - class :表示数据是属于谁的，默认是所有人的，如果是某个人的，就填写志愿者的名字
-        - wave : ndarray 波长
-        - plt_show : bool 是否用matplotlib画图
-    ---------
-    Returns:
-    ---------
-    Modify:
-    -------
-        - 2023-11-28 : 增加了Wavelengths参数，可以传入波长数据，如果不传入，就默认加载1899维的波长数据
-        - 2023-12-14 : 增加了plt_show参数，可以选择是用matlibplot画图还是用plotly画图
-
-    '''
-    import numpy as np
-    import pandas as pd 
-    import matplotlib.pyplot as plt
-    import plotly.graph_objects as go
-    
-    # 读取数据
-    absorbance = X
-###### 2023-11-28 增加了Wavelengths参数，可以传入波长数据，如果不传入，就默认加载1899维的波长数据 begin
-    # if wave is None: 
-    #     wavelengths = [i for i in range(X.shape[1])]
-    # else:
-    #     wavelengths = wave
-###############################3 end
-        
-
-    ####begin 是否用matplotlib画图 modify 2023-12-14
-    if plt_show:
-        # 解决中文显示问题
-        plt.rcParams['font.sans-serif'] = ['SimHei']
-        plt.rcParams['axes.unicode_minus'] = False
-
-        # matplotlib plotting
-        plt.figure(figsize=(15,5))
-        for i in range(len(absorbance)):
-            plt.plot(absorbance[i,:])
-        plt.xlabel('Wavelength')
-        plt.ylabel('Absorbance')
-        # plt.legend()
-        plt.title(category+' Spectra Absorbance Curve')
-        plt.show()
-        return
-    ####end 是否用matplotlib画图 modify 2023-12-14
-
-    
-    if y is None:
-        y = np.zeros(X.shape[0])
-        print("Warning: y is None, set y to zeros")
-
-
-    fig = go.Figure()
-    for i in range(len(absorbance)):
-        fig.add_trace(go.Scatter(x=None, y=absorbance[i,:],name=str(y[i])))
-    fig.update_layout(title=category+" Spectra Absorbance Curve",
-                        xaxis_title="Wavelength(nm)",
-                        yaxis_title="Absorbance")
-    fig.show()
 
 def Sample_spectral_ranking(X,y,category="all_samples" ,wave = None):
     '''画光谱吸收排序图

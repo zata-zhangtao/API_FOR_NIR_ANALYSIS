@@ -21,6 +21,7 @@ from sklearn.cross_decomposition import PLSRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.svm import SVR
 from sklearn.linear_model import LinearRegression
+from .AnalysisClass.DataAnalysisReport import SpectralAnalysisReport
 
 # Set font configuration for Chinese characters (optional)
 try:
@@ -32,6 +33,7 @@ except:
 
 
 __all__ = [
+    'generate_analysis_report',
     'analyze_spectral_data',
     'load_spectral_data',
     'print_basic_data_info',
@@ -47,6 +49,32 @@ __all__ = [
 # === Comprehensive Spectral Data Analysis Functions ===
 # This module has been refactored to break down the monolithic analyze_spectral_data
 # function into smaller, focused components for better maintainability.
+
+def generate_analysis_report(dataset, output_path='data_analysis_report.pdf'):
+    """
+    生成数据分析报告的便捷函数
+    
+    Parameters:
+    -----------
+    dataset : dict[str, numpy.ndarray]
+        必须包含key为"光谱"和"理化值"的键值对
+    output_path : str, optional
+        输出PDF文件路径
+        
+    Returns:
+    --------
+    str or None
+        成功则返回报告路径，失败则返回None
+    """
+    try:
+        analyzer = SpectralAnalysisReport(dataset, output_path)
+        analyzer.analyze_and_generate_report()
+        return output_path
+    except Exception as e:
+        print(f"生成报告时发生错误: {str(e)}")
+        print(f"错误发生在: {e.__traceback__.tb_frame.f_code.co_filename} 第 {e.__traceback__.tb_lineno} 行")
+        return None
+
 
 
 def load_spectral_data(file_path: str) -> tuple:

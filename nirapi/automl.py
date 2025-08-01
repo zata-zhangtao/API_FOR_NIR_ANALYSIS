@@ -34,7 +34,8 @@ from .AnalysisClass.CreateTrainReport import CreateTrainReport
 
 
 __all__ = [
-    'train_model_for_trick_game_v2',
+    'automl_pipeline_with_target_optimization',
+    # 'train_model_for_trick_game_v2',
     'run_optuna_v5', 
     'rebuild_model_v2',
     'run_regression_optuna_v3',
@@ -42,6 +43,9 @@ __all__ = [
 ]
 
 
+
+
+# Backward compatibility alias
 def train_model_for_trick_game_v2(
     max_attempts: int = 10,
     splited_data: tuple = None, 
@@ -51,6 +55,47 @@ def train_model_for_trick_game_v2(
     n_trials: int = 100, 
     selected_metric: str = "rmse", 
     target_score: float = 0.0002,
+    save_dir: str = "results",
+    filename: str = None,
+    **kw
+) -> Union[bool, Dict[str, Any]]:
+    """
+    Backward compatibility alias for automl_pipeline_with_target_optimization.
+    
+    This function is deprecated. Please use automl_pipeline_with_target_optimization instead.
+    """
+    import warnings
+    warnings.warn(
+        "train_model_for_trick_game_v2 is deprecated. Use automl_pipeline_with_target_optimization instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    return automl_pipeline_with_target_optimization(
+        max_attempts=max_attempts,
+        splited_data=splited_data,
+        X=X,
+        y=y,
+        test_size=test_size,
+        n_trials=n_trials,
+        selected_metric=selected_metric,
+        target_score=target_score,
+        save_dir=save_dir,
+        filename=filename,
+        **kw
+    )
+
+
+
+def automl_pipeline_with_target_optimization(
+    max_attempts: int = 10,
+    splited_data: tuple = None, 
+    X: np.ndarray = None, 
+    y: np.ndarray = None, 
+    test_size: float = 0.34,  
+    n_trials: int = 100, 
+    selected_metric: str = "rmse", 
+    target_score: float = 0.0002,
+    save_dir: str = "results",
     filename: str = None,
     **kw
 ) -> Union[bool, Dict[str, Any]]:
@@ -86,6 +131,8 @@ def train_model_for_trick_game_v2(
             test metric
         - target_score : float
             if the score is less than target_score, then the training will be stopped
+        - save_dir : str
+            the directory of the report
         - filename : str
             the filename of the report
         - kw : dict
@@ -124,12 +171,14 @@ def train_model_for_trick_game_v2(
         "selected_dim_red" : ["pca"],
         "selected_model" : [ "SVR"]
         }
-        train_model_for_trick_game_v2(splited_data=(X_train, X_test, y_train, y_test), test_size=0.34,  n_trials=100, selected_metric="rmse", target_score=0.0002,filename = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")+"_人体乳酸_加心率——混合建模", **kw)
+        automl_pipeline_with_target_optimization(splited_data=(X_train, X_test, y_train, y_test), test_size=0.34,  n_trials=100, selected_metric="rmse", target_score=0.0002,filename = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")+"_人体乳酸_加心率——混合建模", **kw)
             
 
     """
     if filename is None:
         filename = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    else:
+        filename = filename + "_" + datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     
     best_score = np.inf
     attempt = 0
@@ -161,7 +210,7 @@ def train_model_for_trick_game_v2(
         print(kw)
         
         # Create report
-        report = CreateTrainReport(f"{filename}_training_report_{attempt}.pdf")
+        report = CreateTrainReport(f"{save_dir}/{filename}_training_report_{attempt}.pdf")
         score_df = report.analyze_data(
             data_dict,
             train_key="train",
@@ -182,11 +231,11 @@ def train_model_for_trick_game_v2(
             'Test Set True Values': pd.Series(score_df.loc['y_true', 'val']),
             'Test Set Predicted Values': pd.Series(score_df.loc['y_pred', 'val'])
         })
-        results_data.to_csv(f"{filename}_{current_score:.5f}_model_results__{attempt}.csv", index=False)
+        results_data.to_csv(f"{save_dir}/{filename}_{current_score:.5f}_model_results__{attempt}.csv", index=False)
         
         if current_score < target_score:
-            score_df.to_csv(f"{filename}_{current_score:.5f}_score_df_{attempt}.csv")
-            print(f"Training complete! Attempt {attempt} reached target. Report saved as {filename}_{current_score:.5f}_score_df_{attempt}.csv")
+            score_df.to_csv(f"{save_dir}/{filename}_{current_score:.5f}_score_df_{attempt}.csv")
+            print(f"Training complete! Attempt {attempt} reached target. Report saved as {save_dir}/{filename}_{current_score:.5f}_score_df_{attempt}.csv")
             return True
             
     if best_score >= target_score:

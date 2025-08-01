@@ -30,61 +30,59 @@ matplotlib.use('Agg')
 import scipy
 import sys
 import random
-
-# 设置matplotlib中文字体
-
+import warnings
 
 class SpectralAnalysisReport:
     def __init__(self, dataset, output_path='spectral_analysis_report.pdf'):
         """
-        初始化光谱数据分析报告类
+        Initialize spectral data analysis report class
         """
-        # matplotlib.rcParams['font.family'] = ['sans-serif']
-        # matplotlib.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial Unicode MS', 
-        #                                         'Microsoft YaHei', 'WenQuanYi Micro Hei']
-        # matplotlib.rcParams['axes.unicode_minus'] = False
-        # if '光谱' not in dataset:
-        #     raise KeyError("数据集中必须包含'光谱'数据")
+
+
         
-        # 设置matplotlib中文字体
-        plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'WenQuanYi Micro Hei', 'DejaVu Sans', 'Arial Unicode MS']
-        plt.rcParams['axes.unicode_minus'] = False
+        # Clear matplotlib font cache and set default fonts
+        import matplotlib.font_manager as fm
+        try:
+            # Force reload font manager without cache
+            fm._load_fontmanager(try_read_cache=False)
+        except:
+            pass
         
-        # 获取系统中可用的中文字体
-        font_paths = []
+        # # Explicitly set matplotlib to use default fonts only
+        # plt.rcParams['font.family'] = 'sans-serif'
+        # plt.rcParams['font.sans-serif'] = ['Arial', 'Helvetica', 'Liberation Sans', 'sans-serif']
+        # plt.rcParams['axes.unicode_minus'] = False
         
-        # Windows系统字体路径
-   
+        # # Disable any Chinese font fallback
+        # plt.rcParams['font.serif'] = ['DejaVu Serif', 'Times', 'serif']
+        # plt.rcParams['font.monospace'] = ['DejaVu Sans Mono', 'Courier', 'monospace']
+        
+        # Set logging level to suppress font warnings
+        import logging
+        import warnings
+        logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
+        logging.getLogger('matplotlib.fontmanager').setLevel(logging.ERROR) 
+        warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
+        warnings.filterwarnings('ignore', message='.*font.*')
+        warnings.filterwarnings('ignore', message='.*Glyph.*missing.*')
+        
+        # Check if dataset contains required spectral data
+        if 'spectra' not in dataset:
+            raise KeyError("Dataset must contain 'spectra' key")
+
+        if 'measured_value' not in dataset:
+            print("\033[91m⚠️  WARNING: If Dataset contain 'measured_value' key, it will be more useful\033[0m")
+        if 'collection_date' not in dataset:
+            print("\033[93m⚠️  WARNING: If Dataset contain 'collection_date' key, it will be more useful\033[0m")
+        if 'volunteer' not in dataset:
+            print("\033[96m⚠️  WARNING: If Dataset contain 'volunteer' key, it will be more useful\033[0m")
             
-        # Linux系统字体路径
-        if os.name == 'posix':
-            font_paths.extend([
-                '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc',
-                
-                os.path.expanduser('~/.fonts')
-            ])
-            
-        # macOS系统字体路径
-        elif sys.platform == 'darwin':
-            font_paths.extend([
-                '/System/Library/Fonts',
-                '/Library/Fonts',
-                os.path.expanduser('~/Library/Fonts')
-            ])
-            
-        # 加载系统字体
-        for font_path in font_paths:
-            if os.path.exists(font_path):
-                matplotlib.font_manager.fontManager.addfont(font_path)
         self.dataset = dataset
         self.output_path = output_path
-        self.spectral_data = dataset['光谱']
+        self.spectral_data = dataset['spectra']
         self.n_samples, self.n_features = self.spectral_data.shape
         
-        # 配置中文字体
-        self._setup_fonts()
-        
-        # 初始化PDF文档
+        # Initialize PDF document
         self.doc = SimpleDocTemplate(
             output_path,
             pagesize=A4,
@@ -94,79 +92,75 @@ class SpectralAnalysisReport:
             bottomMargin=72
         )
         
-        # 初始化样式
+        # Initialize styles
         self.styles = getSampleStyleSheet()
         self._setup_styles()
         self.pdf_elements = []
-        self.analyze_and_generate_report()
+        # self.analyze_and_generate_report()
 
     def _setup_fonts(self):
-        """配置中文字体"""
-        try:
-            # 尝试注册 Microsoft YaHei 字体
-            pdfmetrics.registerFont(TTFont('MyFont', '/usr/share/fonts/truetype/wqy/wqy-microhei.ttc'))
-        except:
-            try:
-                # 尝试注册 SimSun 字体
-                pdfmetrics.registerFont(TTFont('MyFont', 'simsun.ttc'))
-            except:
-                try:
-                    # 尝试注册 SimHei 字体
-                    pdfmetrics.registerFont(TTFont('MyFont', 'simhei.ttf'))
-                except:
-                    print("警告：未能找到合适的中文字体，可能会影响PDF中的中文显示")
-                    print("请确保系统中安装了以下字体之一：Microsoft YaHei (msyh.ttc)、SimSun (simsun.ttc)、SimHei (simhei.ttf)")
+        """Setup fonts for PDF generation"""
+        # Use default Helvetica font for PDF
+        self.font_available = True
 
     def _setup_styles(self):
-        """设置文档样式"""
-        # 标题样式
-        self.styles.add(ParagraphStyle(
-            name='ChineseHeading1',
-            fontName='MyFont',
-            fontSize=18,
-            leading=22,
-            spaceAfter=12,
-            alignment=1  # 居中
-        ))
+        """Setup document styles"""
+        # Use default Helvetica font
+        font_name = 'Helvetica'
         
-        self.styles.add(ParagraphStyle(
-            name='ChineseHeading2',
-            fontName='MyFont',
-            fontSize=16,
-            leading=20,
-            spaceAfter=10,
-            spaceBefore=10
-        ))
+        # Check if custom styles already exist, if not add them
+        if 'CustomHeading1' not in self.styles:
+            self.styles.add(ParagraphStyle(
+                name='CustomHeading1',
+                fontName=font_name,
+                fontSize=18,
+                leading=22,
+                spaceAfter=12,
+                alignment=1  # Center
+            ))
         
-        # 正文样式
-        self.styles.add(ParagraphStyle(
-            name='ChineseBody',
-            fontName='MyFont',
-            fontSize=12,
-            leading=14,
-            alignment=0  # 左对齐
-        ))
+        if 'CustomHeading2' not in self.styles:
+            self.styles.add(ParagraphStyle(
+                name='CustomHeading2',
+                fontName=font_name,
+                fontSize=16,
+                leading=20,
+                spaceAfter=10,
+                spaceBefore=10
+            ))
+        
+        # Body text style
+        if 'CustomBody' not in self.styles:
+            self.styles.add(ParagraphStyle(
+                name='CustomBody',
+                fontName=font_name,
+                fontSize=12,
+                leading=14,
+                alignment=0  # Left align
+            ))
 
     def add_heading(self, text, level=1):
-        """添加标题"""
-        style = 'ChineseHeading1' if level == 1 else 'ChineseHeading2'
+        """Add heading"""
+        style = 'CustomHeading1' if level == 1 else 'CustomHeading2'
         self.pdf_elements.append(Paragraph(text, self.styles[style]))
         self.pdf_elements.append(Spacer(1, 12))
 
     def add_paragraph(self, text):
-        """添加段落"""
-        self.pdf_elements.append(Paragraph(text, self.styles['ChineseBody']))
+        """Add paragraph"""
+        self.pdf_elements.append(Paragraph(text, self.styles['CustomBody']))
         self.pdf_elements.append(Spacer(1, 12))
 
     def add_table(self, data, colWidths=None):
-        """添加表格"""
+        """Add table"""
+        # Use default font
+        font_name = 'Helvetica'
             
-        # 设置表格样式
+        # Set table style
         style = [
             ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, -1), 'MyFont'),
+            ('FONTNAME', (0, 0), (-1, -1), font_name),
             ('FONTSIZE', (0, 0), (-1, 0), 12),
             ('FONTSIZE', (0, 1), (-1, -1), 10),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
@@ -179,25 +173,25 @@ class SpectralAnalysisReport:
             colWidths = [self.doc.width/len(data[0])] * len(data[0])
             
         if len(data) > 25:
-            # 保留表头并随机选择25行数据
+            # Keep header and randomly select 25 rows of data
             header = data[0]
             body = data[1:]
             selected_rows = random.sample(body, min(24, len(body)))
             
-            # 如果第一列是数字，按第一列排序
+            # If first column is numeric, sort by first column
             try:
-                # 尝试将第一列转换为数字
+                # Try to convert first column to numbers
                 first_col_nums = [float(row[0]) for row in selected_rows]
-                # 按第一列数值排序
+                # Sort by first column values
                 sorted_indices = np.argsort(first_col_nums)
                 selected_rows = [selected_rows[i] for i in sorted_indices]
             except (ValueError, TypeError):
-                # 如果转换失败，说明不是数字，保持随机顺序
+                # If conversion fails, keep random order
                 pass
                 
             truncated_data = [header] + selected_rows
-            # 添加提示信息行
-            info_row = [f"(显示25条随机数据,共{len(data)}条)" for _ in range(len(data[0]))]
+            # Add info row
+            info_row = [f"(Showing 25 random samples, total {len(data)} records)" for _ in range(len(data[0]))]
             truncated_data.append(info_row)
             table = Table(truncated_data, colWidths=colWidths, style=style)
         else:
@@ -206,58 +200,37 @@ class SpectralAnalysisReport:
         self.pdf_elements.append(table)
         self.pdf_elements.append(Spacer(1, 12))
 
-# ... existing code ...
+
     def figure_to_image(self, fig):
-        """将matplotlib图形转换为reportlab图像"""
+        """Convert matplotlib figure to reportlab image"""
         buf = io.BytesIO()
         
-        # 获取PDF页面的可用空间
-        available_width = self.doc.width * 0.9  # 留出10%边距
-        available_height = self.doc.height * 0.6  # 留出40%用于其他内容
+        # Get available space on PDF page
+        available_width = self.doc.width * 0.9  # Leave 10% margin
+        available_height = self.doc.height * 0.6  # Leave 40% for other content
         
-        # 计算当前图像尺寸
+        # Calculate current image size
         fig_size = fig.get_size_inches()
-        dpi = 100  # 降低DPI以减小文件大小
+        dpi = 100  # Lower DPI to reduce file size
         
-        # 计算图像的实际像素尺寸
+        # Calculate actual pixel size of image
         img_width = fig_size[0] * dpi
         img_height = fig_size[1] * dpi
         
-        # 计算缩放比例
+        # Calculate scaling ratio
         width_ratio = available_width / img_width
         height_ratio = available_height / img_height
-        scale = min(width_ratio, height_ratio, 1.0)  # 不要放大，只缩小
+        scale = min(width_ratio, height_ratio, 1.0)  # Don't enlarge, only shrink
         
-        # 设置中文字体
-        
- # 保存图像前确保所有文本元素使用中文字体
-        # for text_obj in fig.findobj(match=lambda x: hasattr(x, 'get_text')):
-        #     try:
-        #         text_obj.set_fontproperties(plt.font_manager.FontProperties(
-        #             family=['SimHei', 'Microsoft YaHei', 'WenQuanYi Micro Hei', 'sans-serif']
-        #         ))
-        #     except:
-        #         pass
-                
-        # 保存图像
+        # Save image
         fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
                    pad_inches=0.1)
     
-        # plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Bitstream Vera Sans', 
-        #                                 'Computer Modern Sans Serif', 'Lucida Grande', 
-        #                                 'Verdana', 'Geneva', 'Lucid', 'Arial', 
-        #                                 'Helvetica', 'Avant Garde', 'sans-serif']
-        # plt.rcParams['axes.unicode_minus'] = False
-        
-        # # 保存图像时指定额外的字体设置
-        # fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
-        #             # fonttype=3,  # 使用Type 3字体，可以更好地支持中文
-        #             pad_inches=0.1)
         
         buf.seek(0)
         img = Image(buf)
         
-        # 设置图像在PDF中的显示尺寸
+        # Set image display size in PDF
         img.drawWidth = img_width * scale
         img.drawHeight = img_height * scale
         
@@ -266,62 +239,62 @@ class SpectralAnalysisReport:
 
     def analyze_and_generate_report(self):
         try:
-            """执行分析并生成PDF报告"""
-            self.add_heading("数据分析报告", 1)
+            """Execute analysis and generate PDF report"""
+            self.add_heading("Data Analysis Report", 1)
                 
-            # 1. 数据集基本信息
-            self.add_heading("1. 数据集基本信息", 2)
+            # 1. Basic dataset information
+            self.add_heading("1. Dataset Basic Information", 2)
             self._analyze_dataset_info()
 
-            self.add_heading("光谱数据", 2)
+            self.add_heading("Spectral Data", 2)
             self._plot_all_spectra()
 
-            self.add_heading("噪声水平", 2)
+            self.add_heading("Noise Levels", 2)
             self._analyze_noise_levels()
 
-            self.add_heading("数据关系分析", 2)
+            self.add_heading("Data Relationship Analysis", 2)
             self._plot_data_relationships()
 
-            self.add_heading("两两分布", 2)
+            self.add_heading("Pairwise Distribution", 2)
             self._plot_pairwise_relationships()
             
-            # 2. 光谱数据分析
-            self.add_heading("2. 光谱数据分析", 2)
+            # 2. Spectral data analysis
+            self.add_heading("2. Spectral Data Analysis", 2)
             self._analyze_spectral_data()
             
-            # 3. 其他特征分析
-            self.add_heading("3. 其他特征分析", 2)
+            # 3. Other features analysis
+            self.add_heading("3. Other Features Analysis", 2)
             try:
                 self._analyze_other_features()
             except Exception as e:
-                self.add_paragraph(f"没有其他特征数据或其他特征数据分析失败：{e}")
-                self.add_paragraph(f"错误位置：{e.__traceback__.tb_frame.f_code.co_filename}:{e.__traceback__.tb_lineno}")
+                self.add_paragraph(f"No other feature data or other feature analysis failed: {e}")
+                self.add_paragraph(f"Error location: {e.__traceback__.tb_frame.f_code.co_filename}:{e.__traceback__.tb_lineno}")
             
-            # 4. 时间模式分析
-            if '采集日期' in self.dataset:
-                self.add_heading("4. 时间模式分析", 2)
+            # 4. Temporal pattern analysis
+            if 'collection_date' in self.dataset:
+                self.add_heading("4. Temporal Pattern Analysis", 2)
                 daily_stats = self._analyze_temporal_patterns()
-                self.add_paragraph("时间模式分析结果：")
+                self.add_paragraph("Temporal pattern analysis results:")
                 
-                # 添加时间模式统计表格
-                stats_table = [['日期', '平均强度', '标准差', '样本数']]
+                # Add temporal pattern statistics table
+                stats_table = [['Date', 'Mean Intensity', 'Standard Deviation', 'Sample Count']]
                 for _, row in daily_stats.iterrows():
                     stats_table.append([
-                        str(row['date']),  # 直接访问 date 列
-                        f"{row[('mean_intensity', 'mean')]:.4f}",  # 正确访问多级索引
-                        f"{row[('mean_intensity', 'std')]:.4f}",   # 正确访问多级索引
-                        str(int(row[('mean_intensity', 'count')]))  # 正确访问多级索引
+                        str(row['date']),  # Direct access to date column
+                        f"{row[('mean_intensity', 'mean')]:.4f}",  # Correct access to multi-level index
+                        f"{row[('mean_intensity', 'std')]:.4f}",   # Correct access to multi-level index
+                        str(int(row[('mean_intensity', 'count')]))  # Correct access to multi-level index
                     ])
                 self.add_table(stats_table)
             
-            # 5. 志愿者模式分析
-            if '志愿者' in self.dataset:
-                self.add_heading("5. 志愿者模式分析", 2)
+            # 5. Volunteer pattern analysis
+            if 'volunteer' in self.dataset:
+                self.add_heading("5. Volunteer Pattern Analysis", 2)
                 volunteer_stats = self._analyze_volunteer_patterns()
-                self.add_paragraph("志愿者模式分析结果：")
+                self.add_paragraph("Volunteer pattern analysis results:")
                 
-                # 添加志愿者统计表格
-                stats_table = [['志愿者ID', '平均强度', '标准差', '样本数']]
+                # Add volunteer statistics table
+                stats_table = [['Volunteer ID', 'Mean Intensity', 'Standard Deviation', 'Sample Count']]
                 for _, row in volunteer_stats.iterrows():
                     stats_table.append([
                         str(row['volunteer']),
@@ -331,94 +304,93 @@ class SpectralAnalysisReport:
                     ])
                 self.add_table(stats_table)
             
-            # 6. 相关性分析
+            # 6. Correlation analysis
             if len(self.dataset.keys()) > 1:
-                self.add_heading("6. 特征相关性分析", 2)
+                self.add_heading("6. Feature Correlation Analysis", 2)
                 try:
                     self._analyze_correlations()
                 except Exception as e:
-                    self.add_paragraph(f"特征相关性分析失败：{e}")
-                    self.add_paragraph(f"错误位置：{e.__traceback__.tb_frame.f_code.co_filename}:{e.__traceback__.tb_lineno}")
+                    self.add_paragraph(f"Feature correlation analysis failed: {e}")
+                    self.add_paragraph(f"Error location: {e.__traceback__.tb_frame.f_code.co_filename}:{e.__traceback__.tb_lineno}")
 
             # 
             self._analyze_spectral_details()
 
-            # 7. 模型分析
-            self.add_heading("7. 模型分析", 2)
+            # 7. Model analysis
+            self.add_heading("7. Model Analysis", 2)
             try:
                 self._analyze_models()
             except Exception as e:
                 print(f"{sys._getframe().f_lineno}: analyze models failed: {str(e)}")
-                self.add_paragraph(f"模型分析失败：{e}")
-                self.add_paragraph(f"错误位置：{e.__traceback__.tb_frame.f_code.co_filename}:{e.__traceback__.tb_lineno}")
+                self.add_paragraph(f"Model analysis failed: {e}")
+                self.add_paragraph(f"Error location: {e.__traceback__.tb_frame.f_code.co_filename}:{e.__traceback__.tb_lineno}")
 
         
         
-        # 生成PDF文件
+        # Generate PDF file
         # try:
             self.doc.build(self.pdf_elements)
-            print(f"报告已生成: {self.output_path}")
+            print(f"Report generated: {self.output_path}")
         except Exception as e:
-            print(f"错误发生在: {e.__traceback__.tb_frame.f_code.co_filename} 第 {e.__traceback__.tb_lineno} 行")
+            print(f"Error occurred at: {e.__traceback__.tb_frame.f_code.co_filename} line {e.__traceback__.tb_lineno}")
             raise
     
     def _plot_data_relationships(self):
-        """绘制任意两个数据类型之间的关系图"""
-        # 获取所有可用于绘图的数据列
+        """Plot relationship graphs between any two data types"""
+        # Get all plottable data columns
         plottable_data = {}
-        # 添加光谱强度
-        spectral_intensities = np.mean(self.dataset['光谱'], axis=1)
-        plottable_data['光谱强度'] =  pd.to_numeric(spectral_intensities, errors='coerce')
+        # Add spectral intensity
+        spectral_intensities = np.mean(self.dataset['spectra'], axis=1)
+        plottable_data['spectral_intensity'] =  pd.to_numeric(spectral_intensities, errors='coerce')
         
         
         for key, value in self.dataset.items():
-            if key != '光谱':  # 排除光谱数据
+            if key != 'spectra':  # Exclude spectral data
                 try:
-                    # 尝试转换为数值类型
-                    print(value)
+                    # Try to convert to numeric type
                     numeric_data = pd.to_numeric(value, errors='coerce')
-                    if  pd.api.types.is_numeric_dtype(numeric_data):  # 如果不是全部为NA，则认为是数值型
+                    if  pd.api.types.is_numeric_dtype(numeric_data):  # If not all NA, treat as numeric
                         plottable_data[key] = numeric_data
-                    else:  # 如果全部转换失败，则作为分类数据处理
+                    else:  # If all conversion failed, treat as categorical data
                         plottable_data[key] = pd.Series(value).astype(str)
                 except Exception as e:
-                    print(f"错误发生在: {e.__traceback__.tb_frame.f_code.co_filename} 第 {e.__traceback__.tb_lineno} 行")
-                    # 如果转换失败，作为分类数据处理
+                    print(f"Error occurred at: {e.__traceback__.tb_frame.f_code.co_filename} line {e.__traceback__.tb_lineno}")
+                    # If conversion failed, treat as categorical data
 
                     plottable_data[key] = pd.Series(value).astype(str)
 
                     
         if len(plottable_data) < 2:
-            self.add_paragraph("数据集中可用于关系分析的变量少于2个，无法进行关系可视化。")
+            self.add_paragraph("Less than 2 variables available for relationship analysis in the dataset, unable to perform relationship visualization.")
             return
 
-        # 对所有可能的数据对进行可视化
+        # Visualize all possible data pairs
         for i, (key1, data1) in enumerate(plottable_data.items()):
             for key2, data2 in list(plottable_data.items())[i+1:]:
                 fig = plt.figure(figsize=(12, 6))
                 
-                # 根据数据类型选择适当的可视化方法
+                # Choose appropriate visualization method based on data types
                 if pd.api.types.is_numeric_dtype(data1) and pd.api.types.is_numeric_dtype(data2):
-                    # 数值 vs 数值：散点图
+                    # Numeric vs Numeric: scatter plot
                     plt.scatter(data1, data2, alpha=0.5)
                     
-                    # 添加趋势线
+                    # Add trend line
                     try:
                         z = np.polyfit(data1, data2, 1)
                         p = np.poly1d(z)
                         plt.plot(data1, p(data1), "r--", alpha=0.8)
                         
-                        # 计算相关系数
+                        # Calculate correlation coefficient
                         corr, p_val = scipy.stats.pearsonr(data1, data2)
                         plt.text(0.05, 0.95, 
-                                f'相关系数: {corr:.3f}\np值: {p_val:.3e}',
+                                f'Correlation: {corr:.3f}\np-value: {p_val:.3e}',
                                 transform=plt.gca().transAxes,
                                 bbox=dict(facecolor='white', alpha=0.8))
                     except:
                         pass
 
                 elif pd.api.types.is_numeric_dtype(data1) and not pd.api.types.is_numeric_dtype(data2):
-                    # 数值 vs 分类：箱线图
+                    # Numeric vs Categorical: box plot
                     df_temp = pd.DataFrame({'value': data1, 'category': data2})
                     unique_categories = df_temp['category'].unique()
                     data_by_category = [df_temp[df_temp['category'] == cat]['value'].dropna().values 
@@ -436,33 +408,33 @@ class SpectralAnalysisReport:
                         plt.xticks(rotation=45)
                         
                         # 进行方差分析
-                        if len(valid_data) >= 2:  # 至少需要两组数据才能进行ANOVA
+                        if len(valid_data) >= 2:  # At least two groups needed for ANOVA
                             try:
-                                # 确保每组至少有两个有效值
+                                # Ensure each group has at least two valid values
                                 valid_groups = [group for group in valid_data if len(group) >= 2]
                                 if len(valid_groups) >= 2:
                                     f_stat, p_val = scipy.stats.f_oneway(*valid_groups)
                                     plt.text(0.05, 0.95, 
-                                            f'ANOVA检验:\nF统计量: {f_stat:.3f}\np值: {p_val:.3e}',
+                                            f'ANOVA Test:\nF-statistic: {f_stat:.3f}\np-value: {p_val:.3e}',
                                             transform=plt.gca().transAxes,
                                             bbox=dict(facecolor='white', alpha=0.8))
                                 else:
                                     plt.text(0.05, 0.95, 
-                                            '无法进行ANOVA检验:\n每组需至少2个样本',
+                                            'Cannot perform ANOVA test:\nEach group needs at least 2 samples',
                                             transform=plt.gca().transAxes,
                                             bbox=dict(facecolor='white', alpha=0.8))
                             except Exception as e:
                                 plt.text(0.05, 0.95, 
-                                        f'ANOVA检验失败:\n{str(e)}',
+                                        f'ANOVA test failed:\n{str(e)}',
                                         transform=plt.gca().transAxes,
                                         bbox=dict(facecolor='white', alpha=0.8))
                     else:
-                        plt.text(0.5, 0.5, '没有足够的有效数据可供分析',
+                        plt.text(0.5, 0.5, 'Not enough valid data for analysis',
                                 horizontalalignment='center',
                                 verticalalignment='center')
 
                 elif pd.api.types.is_numeric_dtype(data2) and not pd.api.types.is_numeric_dtype(data1):
-                    # 分类 vs 数值：箱线图
+                    # Categorical vs Numeric: box plot
                     df_temp = pd.DataFrame({'value': data2, 'category': data1})
                     unique_categories = df_temp['category'].unique()
                     data_by_category = [df_temp[df_temp['category'] == cat]['value'].dropna().values 
@@ -481,37 +453,37 @@ class SpectralAnalysisReport:
                         plt.xticks(rotation=45)
                         
                         # 进行方差分析
-                        if len(valid_data) >= 2:  # 至少需要两组数据才能进行ANOVA
+                        if len(valid_data) >= 2:  # At least two groups needed for ANOVA
                             try:
                                 f_stat, p_val = scipy.stats.f_oneway(*valid_data)
                                 plt.text(0.05, 0.95, 
-                                        f'ANOVA检验:\nF统计量: {f_stat:.3f}\np值: {p_val:.3e}',
+                                        f'ANOVA Test:\nF-statistic: {f_stat:.3f}\np-value: {p_val:.3e}',
                                         transform=plt.gca().transAxes,
                                         bbox=dict(facecolor='white', alpha=0.8))
                             except Exception as e:
-                                print(f"ANOVA分析失败: {str(e)}")
+                                print(f"ANOVA analysis failed: {str(e)}")
                     else:
-                        plt.text(0.5, 0.5, '没有有效的数据可供分析',
+                        plt.text(0.5, 0.5, 'No valid data for analysis',
                                 horizontalalignment='center',
                                 verticalalignment='center')
 
                 else:
-                    # 分类 vs 分类：热力图
+                    # Categorical vs Categorical: heatmap
                     try:
-                        # 确保数据都是字符串类型
+                        # Ensure data are string type
                         df_temp = pd.DataFrame({
                             'var1': pd.Series(data1).astype(str),
                             'var2': pd.Series(data2).astype(str)
                         })
                         
-                        # 创建交叉表
+                        # Create contingency table
                         contingency_table = pd.crosstab(df_temp['var1'], df_temp['var2'])
                         
-                        # 创建带有子图的图形
+                        # Create figure with subplots
                         fig = plt.figure(figsize=(15, 10))
                         gs = plt.GridSpec(2, 2, width_ratios=[0.2, 0.8], height_ratios=[0.8, 0.2])
                         
-                        # 主热力图
+                        # Main heatmap
                         ax_main = plt.subplot(gs[0, 1])
                         if contingency_table.shape[0] * contingency_table.shape[1] > 100:
                             sns.heatmap(contingency_table, annot=True, fmt='d', cmap='YlOrRd',
@@ -522,28 +494,28 @@ class SpectralAnalysisReport:
                         plt.xticks(rotation=45, ha='right')
                         plt.yticks(rotation=0)
                         
-                        # 左侧柱状图（var1的分布）
+                        # Left bar chart (var1 distribution)
                         ax_left = plt.subplot(gs[0, 0])
                         var1_counts = df_temp['var1'].value_counts()
                         ax_left.barh(range(len(var1_counts)), var1_counts.values)
                         ax_left.set_yticks([])
                         ax_left.invert_xaxis()
                         
-                        # 底部柱状图（var2的分布）
+                        # Bottom bar chart (var2 distribution)
                         ax_bottom = plt.subplot(gs[1, 1])
                         var2_counts = df_temp['var2'].value_counts()
                         ax_bottom.bar(range(len(var2_counts)), var2_counts.values)
                         ax_bottom.set_xticks([])
                         
-                        # 进行卡方检验
+                        # Perform chi-square test
                         if contingency_table.shape[0] > 1 and contingency_table.shape[1] > 1:
                             chi2, p_val, dof, expected = scipy.stats.chi2_contingency(contingency_table)
                             plt.text(1.05, 0.95,
-                                   f'卡方检验:\n统计量: {chi2:.3f}\np值: {p_val:.3e}',
+                                   f'Chi-square test:\nStatistic: {chi2:.3f}\np-value: {p_val:.3e}',
                                    transform=ax_main.transAxes,
                                    bbox=dict(facecolor='white', alpha=0.8))
                     except Exception as e:
-                        plt.text(0.5, 0.5, f'无法创建热力图: {str(e)}',
+                        plt.text(0.5, 0.5, f'Cannot create heatmap: {str(e)}',
                                 horizontalalignment='center',
                                 verticalalignment='center')
                     
@@ -551,7 +523,7 @@ class SpectralAnalysisReport:
                     try:
                         chi2, p_val, dof, expected = scipy.stats.chi2_contingency(contingency_table)
                         plt.text(1.05, 0.95, 
-                                f'卡方检验:\n统计量: {chi2:.3f}\np值: {p_val:.3e}',
+                                                                    f'Chi-square test:\nStatistic: {chi2:.3f}\np-value: {p_val:.3e}',
                                 transform=plt.gca().transAxes,
                                 bbox=dict(facecolor='white', alpha=0.8))
                     except:
@@ -562,36 +534,36 @@ class SpectralAnalysisReport:
                 plt.ylabel(key2)
                 plt.grid(True, alpha=0.3)
                 
-                # 调整布局以避免标签重叠
+                # Adjust layout to avoid label overlap
                 plt.tight_layout()
-                # 添加到PDF
+                # Add to PDF
                 self.pdf_elements.append(self.figure_to_image(fig))
                 plt.close(fig)
                 
-                # 添加统计描述
-                self.add_paragraph(f"\n{key1}与{key2}的关系分析：")
+                # Add statistical description
+                self.add_paragraph(f"\nRelationship analysis between {key1} and {key2}:")
                 
-                # 根据数据类型添加不同的统计描述
+                # Add different statistical descriptions based on data type
                 if data1.dtype.kind in 'iufc' and data2.dtype.kind in 'iufc':
-                    # 添加数值型变量之间的统计描述
-                    stats_table = [['统计量', '值']]
-                    stats_table.append(['样本数', str(len(data1))])
+                    # Add statistical description for numeric variables
+                    stats_table = [['Statistic', 'Value']]
+                    stats_table.append(['Sample Count', str(len(data1))])
                     
                     if corr is not None:
-                        stats_table.append(['Pearson相关系数', f"{corr:.4f}"])
-                        stats_table.append(['相关性p值', f"{p_val:.4e}"])
+                        stats_table.append(['Pearson Correlation', f"{corr:.4f}"])
+                        stats_table.append(['Correlation p-value', f"{p_val:.4e}"])
                     
                     self.add_table(stats_table)
                     
                 elif data1.dtype.kind not in 'iufc' or data2.dtype.kind not in 'iufc':
-                    # 添加分类变量相关的统计描述
+                    # Add statistical description for categorical variables
                     if 'f_stat' in locals():
-                        stats_table = [['统计量', '值']]
-                        stats_table.append(['ANOVA F统计量', f"{f_stat:.4f}"])
-                        stats_table.append(['ANOVA p值', f"{p_val:.4e}"])
+                        stats_table = [['Statistic', 'Value']]
+                        stats_table.append(['ANOVA F-statistic', f"{f_stat:.4f}"])
+                        stats_table.append(['ANOVA p-value', f"{p_val:.4e}"])
                         self.add_table(stats_table)
                     
-                    # 添加基本的描述性统计
+                    # Add basic descriptive statistics
                     if data1.dtype.kind in 'iufc':
                         numeric_data = data1
                         category_data = data2
@@ -599,13 +571,13 @@ class SpectralAnalysisReport:
                         numeric_data = data2
                         category_data = data1
                     
-                    # 计算每个类别的描述性统计
-                    desc_table = [['类别', '样本数', '平均值', '标准差', '最小值', '最大值']]
+                    # Calculate descriptive statistics for each category
+                    desc_table = [['Category', 'Sample Count', 'Mean', 'Std Dev', 'Min Value', 'Max Value']]
                     
-                    # 确保数据为数值型
+                    # Ensure data is numeric type
                     numeric_data = pd.to_numeric(numeric_data, errors='coerce')
                     
-                    # 使用pandas进行分组统计,避免空值和非数值的问题
+                    # Use pandas for group statistics, avoiding null and non-numeric issues
                     df = pd.DataFrame({'numeric': numeric_data, 'category': category_data})
                     for cat in df['category'].unique():
                         cat_data = df[df['category'] == cat]['numeric'].dropna()
@@ -630,81 +602,84 @@ class SpectralAnalysisReport:
                     self.add_table(desc_table)
     
     def _plot_all_spectra(self):
-        """绘制按不同标签分组的光谱数据叠加图"""
-        # 获取所有非光谱数据的列作为标签
-        label_columns = [key for key in self.dataset.keys() if key != '光谱']
+        """Plot spectral data overlay grouped by different labels"""
+        # Get all non-spectral data columns as labels
+        label_columns = [key for key in self.dataset.keys() if key != 'spectra']
         
         for label_column in label_columns:
             try:
-                # 创建图形
+                # Create figure
                 
-                # 获取唯一的标签值
+                # Get unique label values
                 unique_labels = np.unique(self.dataset[label_column])
                 
-                # 为不同标签设置不同的颜色
+                # Set different colors for different labels
                 colors = plt.cm.rainbow(np.linspace(0, 1, len(unique_labels)))
                 fig = plt.figure(figsize=(15, 20))
                 gs = plt.GridSpec(4, 1, height_ratios=[3, 1, 1, 1], hspace=0.3)
                 
-                # 上方子图：按标签分组的光谱
+                # Upper subplot: spectra grouped by labels
                 ax1 = plt.subplot(gs[0])
                 
-                # 为每个标签绘制光谱
+                # Draw spectra for each label
                 for label, color in zip(unique_labels, colors):
-                    # 获取该标签对应的光谱数据索引
+                    # Get spectral data indices for this label
                     mask = self.dataset[label_column] == label
                     label_spectra = self.spectral_data[mask]
                     
-                    # 计算该标签的平均光谱和标准差
+                    # Calculate mean spectrum and standard deviation for this label
                     label_mean = np.mean(label_spectra, axis=0)
                     label_std = np.std(label_spectra, axis=0)
                     
-                    # 绘制该标签的所有光谱（透明度较高）
+                    # Draw all spectra for this label (high transparency)
                     alpha_value = max(0.05, 1.0 / np.sqrt(len(label_spectra)))
                     for spectrum in label_spectra:
                         ax1.plot(spectrum, '-', color=color, alpha=alpha_value, linewidth=0.5)
                     
-                    # # 绘制该标签的平均光谱（不透明）
+                    # # Draw mean spectrum for this label (opaque)
                     # ax1.plot(label_mean, '-', color=color, linewidth=2, 
                     #         label=f'{label_column}={label} (n={len(label_spectra)})')
                     
-                    # # 绘制标准差范围
+                    # # Draw standard deviation range
                     # ax1.fill_between(range(len(label_mean)),
                     #             label_mean - label_std,
                     #             label_mean + label_std,
                     #             color=color, alpha=0.2)
                 
-                # 设置上方子图的标签和标题
-                ax1.set_title(f'按{label_column}分组的光谱数据')
-                ax1.set_xlabel('波长索引')
-                ax1.set_ylabel('光谱强度')
+                # Set labels and title for upper subplot
+                ax1.set_title(f'Spectral Data Grouped by {label_column}')
+                ax1.set_xlabel('Wavelength Index')
+                ax1.set_ylabel('Spectral Intensity')
                 ax1.grid(True, alpha=0.3)
-                ax1.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+                # Only add legend if there are labeled artists
+                handles, labels = ax1.get_legend_handles_labels()
+                if handles:
+                    ax1.legend()
                 
-                # 中间子图：各组的均值
+                # Middle subplot: mean values for each group
                 ax2 = plt.subplot(gs[1])
                 
-                # 为每个标签绘制均值
+                # Draw mean values for each label
                 for label, color in zip(unique_labels, colors):
                     mask = self.dataset[label_column] == label
                     label_spectra = self.spectral_data[mask]
                     
-                    # 计算均值
+                    # Calculate mean
                     label_mean = np.mean(label_spectra, axis=0)
                     
-                    # 绘制均值
+                    # Draw mean
                     ax2.plot(label_mean, '-', color=color, label=f'{label_column}={label}')
                 
-                # 设置中间子图的标签
-                ax2.set_xlabel('波长索引')
-                ax2.set_ylabel('均值')
+                # Set labels for middle subplot
+                ax2.set_xlabel('Wavelength Index')
+                ax2.set_ylabel('Mean Value')
                 ax2.grid(True, alpha=0.3)
                 ax2.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
                 
-                # 第三个子图：归一化后的均值
+                # Third subplot: normalized mean values
                 ax4 = plt.subplot(gs[2])
                 
-                # 收集所有标签的均值数据
+                # Collect mean data for all labels
                 all_means = []
                 for label in unique_labels:
                     mask = self.dataset[label_column] == label
@@ -712,53 +687,53 @@ class SpectralAnalysisReport:
                     label_mean = np.mean(label_spectra, axis=0)
                     all_means.append(label_mean)
                 
-                # 将所有均值数据转换为numpy数组
+                # Convert all mean data to numpy array
                 all_means = np.array(all_means)
                 
-                # 对每个特征(波长点)分别进行归一化
+                # Normalize each feature (wavelength point) separately
                 normalized_means = np.zeros_like(all_means)
-                for feature_idx in range(all_means.shape[1]):  # 遍历每个特征(波长点)
-                    feature_values = all_means[:, feature_idx]  # 获取所有label在该特征上的值
-                    max_val = np.max(feature_values)  # 该特征的最大值
-                    min_val = np.min(feature_values)  # 该特征的最小值
-                    if max_val != min_val:  # 避免除以零
+                for feature_idx in range(all_means.shape[1]):  # Iterate through each feature (wavelength point)
+                    feature_values = all_means[:, feature_idx]  # Get values for all labels at this feature
+                    max_val = np.max(feature_values)  # Maximum value for this feature
+                    min_val = np.min(feature_values)  # Minimum value for this feature
+                    if max_val != min_val:  # Avoid division by zero
                         normalized_means[:, feature_idx] = (feature_values - min_val) / (max_val - min_val)
                     else:
                         normalized_means[:, feature_idx] = feature_values
                 
-                # 为每个标签绘制归一化后的均值
+                # Draw normalized mean values for each label
                 for label, color, norm_mean in zip(unique_labels, colors, normalized_means):
                     ax4.plot(norm_mean, '-', color=color, label=f'{label_column}={label}')
                 
-                # 设置第三个子图的标签
-                ax4.set_xlabel('波长索引(特征)')
-                ax4.set_ylabel('归一化均值 (0-1)')
+                # Set labels for third subplot
+                ax4.set_xlabel('Wavelength Index (Feature)')
+                ax4.set_ylabel('Normalized Mean (0-1)')
                 ax4.grid(True, alpha=0.3)
                 ax4.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
                 
-                # 最下方子图：各组的变异系数
+                # Bottom subplot: coefficient of variation for each group
                 ax3 = plt.subplot(gs[3])
                 
-                # 为每个标签计算和绘制变异系数
+                # Calculate and draw coefficient of variation for each label
                 for label, color in zip(unique_labels, colors):
                     mask = self.dataset[label_column] == label
                     label_spectra = self.spectral_data[mask]
                     
-                    # 计算变异系数
+                    # Calculate coefficient of variation
                     label_mean = np.mean(label_spectra, axis=0)
                     label_std = np.std(label_spectra, axis=0)
                     cv = label_std / np.abs(label_mean) * 100
                     
-                    # 绘制变异系数
+                    # Draw coefficient of variation
                     ax3.plot(cv, '-', color=color, label=f'{label_column}={label}')
                 
-                # 设置下方子图的标签
-                ax3.set_xlabel('波长索引')
-                ax3.set_ylabel('变异系数 (%)')
+                # Set labels for bottom subplot
+                ax3.set_xlabel('Wavelength Index')
+                ax3.set_ylabel('Coefficient of Variation (%)')
                 ax3.grid(True, alpha=0.3)
                 ax3.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-                # 为每个标签添加统计信息
-                stats_table = [['标签值', '样本数', '平均强度', '标准差', '平均变异系数(%)']]
+                # Add statistical information for each label
+                stats_table = [['Label Value', 'Sample Count', 'Mean Intensity', 'Standard Deviation', 'Mean CV (%)']]
                 for label in unique_labels:
                     mask = self.dataset[label_column] == label
                     label_spectra = self.spectral_data[mask]
@@ -776,30 +751,30 @@ class SpectralAnalysisReport:
                         f"{mean_cv:.2f}"
                     ])
                 
-                plt.tight_layout()
+                # plt.tight_layout()
                 self.pdf_elements.append(self.figure_to_image(fig))
                 plt.close(fig)
                 
-                # 添加该标签的统计表格
-                self.add_paragraph(f"\n{label_column}分组统计：")
+                # Add statistics table for this label
+                self.add_paragraph(f"\n{label_column} Grouping Statistics:")
                 self.add_table(stats_table)
             except Exception as e:
                 print(f"{sys._getframe().f_lineno}: draw spectra failed: {str(e)}")
 
     def _analyze_models(self):
-        """分析不同数据类型的预测建模，支持基于分类变量的分组分析"""
-        # 准备数据
+        """Analyze predictive modeling for different data types, supporting group analysis based on categorical variables"""
+        # Prepare data
         chemical_features = {}
         categorical_features = {}
         
         for key, value in self.dataset.items():
             try:
-                if key != '光谱':
+                if key != 'spectra':
                     if pd.api.types.is_numeric_dtype(value):
                         chemical_features[key] = value
                     else:
                         try:
-                            # 尝试转换为数值类型
+                            # Try to convert to numeric type
                             numeric_value = pd.to_numeric(value)
                             chemical_features[key] = numeric_value
                         except:
@@ -813,10 +788,10 @@ class SpectralAnalysisReport:
         spectral_data = self.spectral_data
         # 对每个数值特征进行预测分析
         for target_name, target_values in chemical_features.items():
-            self.add_heading(f"{target_name}的模型预测分析", 3)
+            self.add_heading(f"Model Prediction Analysis for {target_name}", 3)
             
             # 1. 使用光谱数据进行常规预测
-            self.add_heading("基于光谱数据的预测", 4)
+            self.add_heading("Prediction Based on Spectral Data", 4)
             spectral_prediction = self._analyze_with_spectral(
                 spectral_data, 
                 target_values,
@@ -827,7 +802,7 @@ class SpectralAnalysisReport:
             if categorical_features:
                 for cat_name, cat_values in categorical_features.items():
                     try:
-                        self.add_heading(f"按{cat_name}分组的{target_name}预测分析", 4)
+                        self.add_heading(f"Prediction Analysis for {target_name} Grouped by {cat_name}", 4)
                         self._analyze_by_group(
                             spectral_data,
                             target_values,
@@ -840,16 +815,16 @@ class SpectralAnalysisReport:
                     
 
             # 3. 如果有日期数据，进行时间序列分析
-            if '采集日期' in self.dataset:
-                self.add_heading(f"{target_name}的时间序列预测分析", 4)
-                time_values = pd.to_datetime(self.dataset['采集日期'])
+            if 'collection_date' in self.dataset:
+                self.add_heading(f"Time Series Prediction Analysis for {target_name}", 4)
+                time_values = pd.to_datetime(self.dataset['collection_date'])
                 try:
                     self._analyze_by_time(
                         spectral_data,
                         target_values,
                         time_values,
                         target_name,
-                        '采集日期'
+                        'collection_date'
                     )
                 except Exception as e:
                     print(f"{sys._getframe().f_lineno}: analyze by time failed: {str(e)}")
@@ -864,14 +839,14 @@ class SpectralAnalysisReport:
         }
         
         for key, value in self.dataset.items():
-            if key == '光谱':
+            if key == 'spectra':
                 feature_types['spectral'][key] = {
                     'data': value,
                     'shape': value.shape
                 }
                 continue
             
-            # 尝试转换为日期类型
+            # Try to convert to date type
             try:
                 pd.to_datetime(value)
                 feature_types['temporal'][key] = {
@@ -882,7 +857,7 @@ class SpectralAnalysisReport:
             except:
                 pass
             
-            # 检查是否为数值型
+            # Check if it's numeric type
             if pd.api.types.is_numeric_dtype(value):
                 feature_types['numeric'][key] = {
                     'data': value,
@@ -891,7 +866,7 @@ class SpectralAnalysisReport:
                     'unique_count': len(pd.unique(value))
                 }
             else:
-                # 非数值型视为分类变量
+                # Non-numeric types are treated as categorical variables
                 feature_types['categorical'][key] = {
                     'data': value,
                     'unique_count': len(pd.unique(value)),
@@ -901,13 +876,13 @@ class SpectralAnalysisReport:
         return feature_types
 
     def _analyze_with_spectral(self, spectral_data, target_values, target_name):
-        """使用光谱数据进行预测分析"""
+        """Perform prediction analysis using spectral data"""
         # 定义模型
         models = {
-            'PLS回归': PLSRegression(n_components=10),
-            '随机森林': RandomForestRegressor(n_estimators=100, random_state=42),
+            'PLS Regression': PLSRegression(n_components=10),
+            'Random Forest': RandomForestRegressor(n_estimators=100, random_state=42),
             'SVR': SVR(kernel='rbf'),
-            '线性回归': LinearRegression()
+            'Linear Regression': LinearRegression()
         }
         
         # 划分训练集和测试集
@@ -936,9 +911,9 @@ class SpectralAnalysisReport:
             plt.plot([y_test.min(), y_test.max()], 
                     [y_test.min(), y_test.max()], 
                     'r--', lw=2)
-            plt.xlabel('实际值')
-            plt.ylabel('预测值')
-            plt.title(f'{name}预测结果')
+            plt.xlabel('Actual Values')
+            plt.ylabel('Predicted Values')
+            plt.title(f'{name} Prediction Results')
             
             plt.text(0.05, 0.95, 
                     f'R2 = {r2:.3f}\nRMSE = {rmse:.3f}\nMAE = {mae:.3f}',
@@ -951,7 +926,7 @@ class SpectralAnalysisReport:
         plt.close(fig)
         
         # 添加结果表格
-        results_table = [['模型', 'R2得分', 'RMSE', 'MAE']]
+        results_table = [['Model', 'R2 Score', 'RMSE', 'MAE']]
         for name, metrics in results.items():
             results_table.append([
                 name,
@@ -966,7 +941,7 @@ class SpectralAnalysisReport:
     def _analyze_by_group(self, spectral_data, target_values, group_values, 
                         target_name, group_name):
         """按分组进行预测分析"""
-        self.add_heading(f"按{group_name}分组的{target_name}预测分析", 4)
+        self.add_heading(f"Prediction Analysis for {target_name} Grouped by {group_name}", 4)
         
         unique_groups = np.unique(group_values)
         group_results = {}
@@ -1009,12 +984,12 @@ class SpectralAnalysisReport:
             plt.plot([y_test.min(), y_test.max()], 
                     [y_test.min(), y_test.max()], 
                     'r--', lw=2)
-            plt.xlabel('实际值')
-            plt.ylabel('预测值')
-            plt.title(f'{group_name}={group}的预测结果')
+            plt.xlabel('Actual Values')
+            plt.ylabel('Predicted Values')
+            plt.title(f'Prediction Results for {group_name}={group}')
             
             plt.text(0.05, 0.95, 
-                    f'样本数: {len(group_target)}\n'
+                    f'Sample Count: {len(group_target)}\n'
                     f'R2 = {r2:.3f}\n'
                     f'RMSE = {rmse:.3f}\n'
                     f'MAE = {mae:.3f}',
@@ -1027,7 +1002,7 @@ class SpectralAnalysisReport:
         plt.close(fig)
         
         # 添加分组比较表格
-        comparison_table = [[f'{group_name}', '样本数', 'R2得分', 'RMSE', 'MAE']]
+        comparison_table = [[f'{group_name}', 'sample_num', 'R2', 'RMSE', 'MAE']]
         for group, metrics in group_results.items():
             comparison_table.append([
                 str(group),
@@ -1042,7 +1017,7 @@ class SpectralAnalysisReport:
     def _analyze_by_time(self, spectral_data, target_values, time_values, 
                         target_name, time_name):
         """按时间进行预测分析"""
-        self.add_heading(f"基于{time_name}的{target_name}时间序列预测分析", 4)
+        self.add_heading(f"Time Series Prediction Analysis for {target_name} Based on {time_name}", 4)
         
         # 将数据按时间排序
         sorted_indices = np.argsort(time_values)
@@ -1070,11 +1045,11 @@ class SpectralAnalysisReport:
         
         # 绘制时间序列预测结果
         fig = plt.figure(figsize=(15, 8))
-        plt.scatter(time_test, y_test, label='实际值', alpha=0.5)
-        plt.scatter(time_test, y_pred, label='预测值', alpha=0.5)
+        plt.scatter(time_test, y_test, label='Actual Values', alpha=0.5)
+        plt.scatter(time_test, y_pred, label='Predicted Values', alpha=0.5)
         plt.xlabel(time_name)
         plt.ylabel(target_name)
-        plt.title(f'{target_name}的时间序列预测')
+        plt.title(f'Time Series Prediction for {target_name}')
         plt.xticks(rotation=45)
         plt.legend()
         
@@ -1097,11 +1072,11 @@ class SpectralAnalysisReport:
         categorical_data = {}
         
         # 计算光谱强度(每个样本的均值)
-        spectral_intensities = np.mean(self.dataset['光谱'], axis=1)
-        numeric_data['光谱强度'] = spectral_intensities
+        spectral_intensities = np.mean(self.dataset['spectra'], axis=1)
+        numeric_data['spectral_intensity'] = spectral_intensities
         
         for key, value in self.dataset.items():
-            if key != '光谱':
+            if key != 'spectra':
                 if pd.api.types.is_numeric_dtype(value):
                     numeric_data[key] = value
                 else:
@@ -1112,7 +1087,7 @@ class SpectralAnalysisReport:
                         categorical_data[key] = value
         
         if len(numeric_data) < 1 or len(categorical_data) < 1:
-            self.add_paragraph("数据集中缺少足够的数值型或分类变量,无法绘制分组分布图。")
+            self.add_paragraph("The dataset lacks sufficient numeric or categorical variables to plot group distribution charts.")
             return
             
         # 创建数据框
@@ -1129,26 +1104,26 @@ class SpectralAnalysisReport:
                 for group in df[cat_col].unique():
                     group_data = df[df[cat_col] == group][num_col]
                     sns.kdeplot(data=group_data, label=str(group))
-                plt.title(f'{num_col}在不同{cat_col}下的密度分布')
+                plt.title(f'Density Distribution of {num_col} under Different {cat_col}')
                 plt.xlabel(num_col)
-                plt.ylabel('密度')
+                plt.ylabel('Density')
                 plt.legend()
                 
                 plt.subplot(1, 2, 2)
                 # 按组绘制小提琴图
                 sns.violinplot(x=cat_col, y=num_col, data=df)
-                plt.title(f'{num_col}在不同{cat_col}下的分布')
+                plt.title(f'Distribution of {num_col} under Different {cat_col}')
                 plt.xticks(rotation=45)
                 
                 plt.tight_layout()
                 
-                # 添加到PDF
+                # Add to PDF
                 self.pdf_elements.append(self.figure_to_image(fig))
                 plt.close(fig)
                 
                 # 添加分组描述性统计
-                self.add_paragraph(f"\n{num_col}按{cat_col}分组的统计描述:")
-                stats_table = [['组别', '样本数', '均值', '标准差', '最小值', '25%分位数', '中位数', '75%分位数', '最大值']]
+                self.add_paragraph(f"\nStatistical description of {num_col} grouped by {cat_col}:")
+                stats_table = [['Group', 'Sample Count', 'Mean', 'Std Dev', 'Min', '25%', 'Median', '75%', 'Max']]
                 
                 for group in df[cat_col].unique():
                     group_data = df[df[cat_col] == group][num_col]
@@ -1172,7 +1147,7 @@ class SpectralAnalysisReport:
         """分析数据集基本信息"""
         # 创建数据集信息表格
         dataset_info = [
-            ['特征名称', '数据类型', '形状', '非空值数量'],
+            ['feature_name', 'data_type', 'shape', 'non_null_count'],
         ]
         
         for key, value in self.dataset.items():
@@ -1183,20 +1158,20 @@ class SpectralAnalysisReport:
                 str(np.sum(~pd.isna(value)))
             ])
         
-        self.add_paragraph("数据集包含以下特征：")
+        self.add_paragraph("The dataset contains the following features:")
         self.add_table(dataset_info)
 
     def _analyze_spectral_data(self):
-        """分析光谱数据"""
+        """Analyze spectral data"""
         # 基本统计信息
         stats = {
-            '样本数量': self.n_samples,
-            '特征数量': self.n_features,
-            '光谱数据统计': {
-                '平均值': f"{np.mean(self.spectral_data):.4f}",
-                '标准差': f"{np.std(self.spectral_data):.4f}",
-                '最小值': f"{np.min(self.spectral_data):.4f}",
-                '最大值': f"{np.max(self.spectral_data):.4f}"
+            'sample_num': self.n_samples,
+            'feature_num': self.n_features,
+            'spectral_data_stats': {
+                'mean': f"{np.mean(self.spectral_data):.4f}",
+                'std': f"{np.std(self.spectral_data):.4f}",
+                'min': f"{np.min(self.spectral_data):.4f}",
+                'max': f"{np.max(self.spectral_data):.4f}"
             }
         }
         
@@ -1213,24 +1188,24 @@ class SpectralAnalysisReport:
         mean_spectrum = np.mean(self.spectral_data, axis=0)
         std_spectrum = np.std(self.spectral_data, axis=0)
         
-        plt.plot(mean_spectrum, 'b-', label='平均光谱')
+        plt.plot(mean_spectrum, 'b-', label='mean_spectrum')
         plt.fill_between(range(len(mean_spectrum)),
                         mean_spectrum - std_spectrum,
                         mean_spectrum + std_spectrum,
                         alpha=0.2,
                         color='b',
-                        label='±1 标准差')
+                                                 label='±1 Std Dev')
         
-        plt.xlabel('波长索引')
-        plt.ylabel('光谱强度')
-        plt.title('平均光谱图及其变异范围')
+        plt.xlabel('wavelength_index')
+        plt.ylabel('spectral_intensity')
+        plt.title('mean_spectrum_and_its_variation_range')
         plt.legend()
         plt.grid(True)
         self.pdf_elements.append(self.figure_to_image(fig))
         plt.close(fig)
         
         # PCA分析
-        self.add_heading("主成分分析 (PCA)", 3)
+        self.add_heading("Principal Component Analysis (PCA)", 3)
         scaler = StandardScaler()
         scaled_data = scaler.fit_transform(self.spectral_data)
         pca = PCA(n_components=3)
@@ -1243,34 +1218,34 @@ class SpectralAnalysisReport:
         plt.plot(range(1, len(explained_variance_ratio) + 1), 
                 cumulative_variance_ratio, 
                 'bo-')
-        plt.xlabel('主成分数量')
-        plt.ylabel('累积解释方差比')
-        plt.title('PCA累积解释方差比')
+        plt.xlabel('principal_component_num')
+        plt.ylabel('cumulative_explained_variance_ratio')
+        plt.title('PCA_cumulative_explained_variance_ratio')
         plt.grid(True)
         self.pdf_elements.append(self.figure_to_image(fig))
         plt.close(fig)
         
-        self.add_paragraph(f"前三个主成分解释方差比：")
+        self.add_paragraph(f"the_first_three_principal_components_explained_variance_ratio：")
         for i, ratio in enumerate(explained_variance_ratio[:3], 1):
             self.add_paragraph(f"PC{i}: {ratio:.4f}")
 
     def _analyze_other_features(self):
         """分析其他特征"""
         for key, value in self.dataset.items():
-            if key != '光谱':
-                self.add_heading(f"{key}特征分析", 3)
+            if key != 'spectra':
+                self.add_heading(f"{key} Feature Analysis", 3)
                 
                 if value.dtype.kind in 'iufc':  # 数值型数据
                     # 统计信息
                     stats = {
-                        '平均值': np.mean(value),
-                        '标准差': np.std(value),
-                        '最小值': np.min(value),
-                        '最大值': np.max(value),
-                        '中位数': np.median(value)
+                        'mean': np.mean(value),
+                        'std': np.std(value),
+                        'min': np.min(value),
+                        'max': np.max(value),
+                        'median': np.median(value)
                     }
                     
-                    stats_table = [['统计量', '值']]
+                    stats_table = [['statistic', 'value']]
                     for stat_name, stat_value in stats.items():
                         stats_table.append([stat_name, f"{stat_value:.4f}"])
                     
@@ -1279,9 +1254,9 @@ class SpectralAnalysisReport:
                     # 绘制分布图
                     fig = plt.figure(figsize=(10, 5))
                     plt.hist(value, bins=30, edgecolor='black')
-                    plt.title(f"{key}分布直方图")
+                    plt.title(f"{key}distribution_histogram")
                     plt.xlabel(key)
-                    plt.ylabel('频次')
+                    plt.ylabel('frequency')
                     plt.grid(True)
                     self.pdf_elements.append(self.figure_to_image(fig))
                     plt.close(fig)
@@ -1290,7 +1265,7 @@ class SpectralAnalysisReport:
                     # 统计每个类别的数量
                     value_counts = pd.Series(value).value_counts()
                     
-                    counts_table = [['类别', '数量']]
+                    counts_table = [['category', 'count']]
                     for cat, count in value_counts.items():
                         counts_table.append([str(cat), str(count)])
                     
@@ -1300,9 +1275,9 @@ class SpectralAnalysisReport:
                     fig = plt.figure(figsize=(10, 5))
                     plt.bar(range(len(value_counts)), value_counts.values)
                     plt.xticks(range(len(value_counts)), value_counts.index, rotation=45)
-                    plt.title(f"{key}类别分布")
+                    plt.title(f"{key}category_distribution")
                     plt.xlabel(key)
-                    plt.ylabel('数量')
+                    plt.ylabel('count')
                     plt.grid(True)
                     plt.tight_layout()
                     self.pdf_elements.append(self.figure_to_image(fig))
@@ -1322,16 +1297,16 @@ class SpectralAnalysisReport:
         plt.subplot(3, 1, 1)
         mean_spectrum = np.mean(spectra, axis=0)
         std_spectrum = np.std(spectra, axis=0)
-        plt.plot(mean_spectrum, 'b-', label='平均光谱')
+        plt.plot(mean_spectrum, 'b-', label='mean_spectrum')
         plt.fill_between(range(len(mean_spectrum)),
                         mean_spectrum - std_spectrum,
                         mean_spectrum + std_spectrum,
                         alpha=0.2,
                         color='b',
-                        label='±1 标准差')
-        plt.title('原始光谱')
-        plt.xlabel('波长索引')
-        plt.ylabel('光谱强度')
+                                                 label='±1 Std Dev')
+        plt.title('original_spectrum')
+        plt.xlabel('wavelength_index')
+        plt.ylabel('spectral_intensity')
         plt.grid(True)
         plt.legend()
         
@@ -1339,16 +1314,16 @@ class SpectralAnalysisReport:
         plt.subplot(3, 1, 2)
         mean_first_deriv = np.mean(first_derivative, axis=0)
         std_first_deriv = np.std(first_derivative, axis=0)
-        plt.plot(mean_first_deriv, 'r-', label='平均一阶导数')
+        plt.plot(mean_first_deriv, 'r-', label='mean_first_derivative')
         plt.fill_between(range(len(mean_first_deriv)),
                         mean_first_deriv - std_first_deriv,
                         mean_first_deriv + std_first_deriv,
                         alpha=0.2,
                         color='r',
-                        label='±1 标准差')
-        plt.title('一阶导数')
-        plt.xlabel('波长索引')
-        plt.ylabel('一阶导数值')
+                                                 label='±1 Std Dev')
+        plt.title('first_derivative')
+        plt.xlabel('wavelength_index')
+        plt.ylabel('first_derivative_value')
         plt.grid(True)
         plt.legend()
         
@@ -1356,16 +1331,16 @@ class SpectralAnalysisReport:
         plt.subplot(3, 1, 3)
         mean_second_deriv = np.mean(second_derivative, axis=0)
         std_second_deriv = np.std(second_derivative, axis=0)
-        plt.plot(mean_second_deriv, 'g-', label='平均二阶导数')
+        plt.plot(mean_second_deriv, 'g-', label='mean_second_derivative')
         plt.fill_between(range(len(mean_second_deriv)),
                         mean_second_deriv - std_second_deriv,
                         mean_second_deriv + std_second_deriv,
                         alpha=0.2,
                         color='g',
-                        label='±1 标准差')
-        plt.title('二阶导数')
-        plt.xlabel('波长索引')
-        plt.ylabel('二阶导数值')
+                                                 label='±1 Std Dev')
+        plt.title('second_derivative')
+        plt.xlabel('wavelength_index')
+        plt.ylabel('second_derivative_value')
         plt.grid(True)
         plt.legend()
         
@@ -1384,11 +1359,11 @@ class SpectralAnalysisReport:
         
         # 创建箱线图
         data = [mean_intensities, max_intensities, min_intensities, range_intensities]
-        labels = ['平均强度', '最大强度', '最小强度', '强度范围']
+        labels = ['mean_intensity', 'max_intensity', 'min_intensity', 'intensity_range']
         
         plt.boxplot(data, labels=labels)
-        plt.title('光谱特征分布')
-        plt.ylabel('强度值')
+        plt.title('spectral_feature_distribution')
+        plt.ylabel('intensity_value')
         plt.grid(True)
         
         plt.tight_layout()
@@ -1397,13 +1372,13 @@ class SpectralAnalysisReport:
         
         # 3. 添加统计信息到报告
         stats_table = [
-            ['统计量', '平均值', '标准差', '最小值', '最大值', '中位数']
+            ['statistic', 'mean', 'std', 'min', 'max', 'median']
         ]
         
         features = {
-            '原始光谱': spectra.mean(axis=1),
-            '一阶导数': first_derivative.mean(axis=1),
-            '二阶导数': second_derivative.mean(axis=1)
+            'original_spectrum': spectra.mean(axis=1),
+            'first_derivative': first_derivative.mean(axis=1),
+            'second_derivative': second_derivative.mean(axis=1)
         }
         
         for name, values in features.items():
@@ -1424,9 +1399,9 @@ class SpectralAnalysisReport:
         valley_indices = scipy.signal.find_peaks(-mean_spectrum)[0]
         
         fig = plt.figure(figsize=(12, 6))
-        plt.plot(mean_spectrum, 'b-', label='平均光谱')
-        plt.plot(peak_indices, mean_spectrum[peak_indices], 'ro', label='峰值')
-        plt.plot(valley_indices, mean_spectrum[valley_indices], 'go', label='谷值')
+        plt.plot(mean_spectrum, 'b-', label='mean_spectrum')
+        plt.plot(peak_indices, mean_spectrum[peak_indices], 'ro', label='peak')
+        plt.plot(valley_indices, mean_spectrum[valley_indices], 'go', label='valley')
         
         # 标注主要峰值
         for idx in peak_indices:
@@ -1436,9 +1411,9 @@ class SpectralAnalysisReport:
                         textcoords='offset points',
                         fontsize=8)
         
-        plt.title('光谱特征峰识别')
-        plt.xlabel('波长索引')
-        plt.ylabel('光谱强度')
+        plt.title('spectral_feature_peak_identification')
+        plt.xlabel('wavelength_index')
+        plt.ylabel('spectral_intensity')
         plt.grid(True)
         plt.legend()
         
@@ -1447,13 +1422,13 @@ class SpectralAnalysisReport:
         plt.close(fig)
         
         # 记录峰值信息
-        self.add_paragraph("主要特征峰位置：")
-        peak_info = [['峰值类型', '波长索引', '强度']]
+        self.add_paragraph("main_peak_position：")
+        peak_info = [['peak_type', 'wavelength_index', 'intensity']]
         
         for idx in peak_indices:
-            peak_info.append(['峰值', str(idx), f"{mean_spectrum[idx]:.4f}"])
+            peak_info.append(['peak', str(idx), f"{mean_spectrum[idx]:.4f}"])
         for idx in valley_indices:
-            peak_info.append(['谷值', str(idx), f"{mean_spectrum[idx]:.4f}"])
+            peak_info.append(['valley', str(idx), f"{mean_spectrum[idx]:.4f}"])
         
         self.add_table(peak_info)
     def _analyze_correlations(self):
@@ -1495,7 +1470,7 @@ class SpectralAnalysisReport:
                 plt.subplot(n_chemicals, 1, idx)
                 
                 # 绘制相关系数曲线
-                plt.plot(correlation, 'b-', label='相关系数')
+                plt.plot(correlation, 'b-', label='correlation_coefficient')
                 
                 # 标记显著性区域
                 significant = np.array(p_values[chem_name]) < 0.05
@@ -1512,9 +1487,9 @@ class SpectralAnalysisReport:
                 plt.axhline(y=0.5, color='g', linestyle=':', alpha=0.5)
                 plt.axhline(y=-0.5, color='g', linestyle=':', alpha=0.5)
                 
-                plt.title(f'光谱与{chem_name}的相关性分析')
-                plt.xlabel('波长索引')
-                plt.ylabel('相关系数')
+                plt.title(f'correlation_analysis_between_spectral_and_{chem_name}')
+                plt.xlabel('wavelength_index')
+                plt.ylabel('correlation_coefficient')
                 plt.grid(True, alpha=0.3)
                 plt.legend()
             
@@ -1529,32 +1504,32 @@ class SpectralAnalysisReport:
                 max_corr = correlation[max_corr_idx]
                 max_corr_p = p_values[chem_name][max_corr_idx]
                 
-                self.add_paragraph(f"{chem_name}相关性分析结果：")
+                self.add_paragraph(f"correlation_analysis_result_of_{chem_name}：")
                 self.add_paragraph(
-                    f"最强相关波长索引：{max_corr_idx}，"
-                    f"相关系数：{max_corr:.4f}，"
+                    f"the_most_strong_correlated_wavelength_index：{max_corr_idx}，"
+                    f"correlation_coefficient：{max_corr:.4f}，"
                     f"p值：{max_corr_p:.4e}"
                 )
                 
                 # 统计显著相关的波长数量
                 sig_count = np.sum(np.array(p_values[chem_name]) < 0.05)
                 self.add_paragraph(
-                    f"显著相关(p<0.05)的波长点数量：{sig_count}，"
-                    f"占总波长点的{sig_count/len(correlation)*100:.2f}%"
+                    f"the_number_of_wavelength_points_with_significant_correlation(p<0.05)：{sig_count}，"
+                    f"the_ratio_of_significant_correlation_wavelength_points_to_total_wavelength_points：{sig_count/len(correlation)*100:.2f}%"
                 )
 
     def _analyze_temporal_patterns(self):
-        """分析时间模式"""
-        if '采集日期' not in self.dataset:
-            raise ValueError("数据集中缺少'采集日期'信息")
+        """analyze_temporal_patterns"""
+        if 'collection_date' not in self.dataset:
+            raise ValueError("the_dataset_is_missing_the_information_of_collection_date")
             
         # 将日期转换为datetime对象
-        dates = pd.to_datetime(self.dataset['采集日期'])
+        dates = pd.to_datetime(self.dataset['collection_date'])
         self.dates = dates
         # 计算每日平均光谱  
         daily_means = pd.DataFrame({
             'date': dates,
-            'mean_intensity': np.mean(self.dataset['光谱'], axis=1)
+            'mean_intensity': np.mean(self.dataset['spectra'], axis=1)
         })
         # 按日期分组并计算统计量
         daily_stats = daily_means.groupby('date').agg({
@@ -1568,9 +1543,9 @@ class SpectralAnalysisReport:
                     yerr=daily_stats['mean_intensity']['std'],
                     fmt='o-',
                     capsize=5)
-        plt.xlabel('日期')
-        plt.ylabel('平均光谱强度')
-        plt.title('光谱强度随时间的变化(每日统计)')
+        plt.xlabel('date')
+        plt.ylabel('mean_spectral_intensity')
+        plt.title('mean_spectral_intensity_over_time(daily_statistics)')
         plt.xticks(rotation=45)
         plt.grid(True)
         plt.tight_layout()
@@ -1583,9 +1558,9 @@ class SpectralAnalysisReport:
         fig = plt.figure(figsize=(15, 6))
         plt.plot(daily_means['date'], daily_means['mean_intensity'], 
                 'o-', alpha=0.5, markersize=5)
-        plt.xlabel('日期')
-        plt.ylabel('平均光谱强度')
-        plt.title('光谱强度随时间的变化(每个样本)')
+        plt.xlabel('date')
+        plt.ylabel('mean_spectral_intensity')
+        plt.title('mean_spectral_intensity_over_time(each_sample)')
         plt.xticks(rotation=45)
         plt.grid(True)
         plt.tight_layout()
@@ -1601,9 +1576,9 @@ class SpectralAnalysisReport:
         date_changes = np.where(daily_means['date'].diff() != pd.Timedelta(0))[0]
         for idx in date_changes:
             plt.axvline(x=idx, color='r', linestyle='--', alpha=0.5)
-        plt.xlabel('样本序号')
-        plt.ylabel('平均光谱强度')
-        plt.title('光谱强度按采集顺序变化')
+        plt.xlabel('sample_index')
+        plt.ylabel('mean_spectral_intensity')
+        plt.title('mean_spectral_intensity_over_time(by_collection_order)')
         plt.grid(True)
         plt.tight_layout()
         
@@ -1612,11 +1587,11 @@ class SpectralAnalysisReport:
         plt.close(fig)
 
         # 如果数据集中包含实测值,绘制实测值随时间变化的图
-        if '实测值' in self.dataset:
+        if 'measured_value' in self.dataset:
             # 创建实测值时间序列数据
             measured_data = pd.DataFrame({
-                'date': pd.to_datetime(self.dataset['采集日期']),
-                'measured_value': self.dataset['实测值']
+                'date': pd.to_datetime(self.dataset['collection_date']),
+                'measured_value': self.dataset['measured_value']
             })
             
             # 计算每日实测值统计
@@ -1631,9 +1606,9 @@ class SpectralAnalysisReport:
                         yerr=daily_measured['measured_value']['std'],
                         fmt='o-',
                         capsize=5)
-            plt.xlabel('日期')
-            plt.ylabel('实测值')
-            plt.title('实测值随时间的变化(每日统计)')
+            plt.xlabel('date')
+            plt.ylabel('measured_value')
+            plt.title('measured_value_over_time(daily_statistics)')
             plt.xticks(rotation=45)
             plt.grid(True)
             plt.tight_layout()
@@ -1646,9 +1621,9 @@ class SpectralAnalysisReport:
             fig = plt.figure(figsize=(15, 6))
             plt.plot(measured_data['date'], measured_data['measured_value'], 
                     'o-', alpha=0.5, markersize=5)
-            plt.xlabel('日期')
-            plt.ylabel('实测值')
-            plt.title('实测值随时间的变化(每个样本)')
+            plt.xlabel('date')
+            plt.ylabel('measured_value')
+            plt.title('measured_value_over_time(each_sample)')
             plt.xticks(rotation=45)
             plt.grid(True)
             plt.tight_layout()
@@ -1663,9 +1638,9 @@ class SpectralAnalysisReport:
             date_changes = np.where(measured_data['date'].diff() != pd.Timedelta(0))[0]
             for idx in date_changes:
                 plt.axvline(x=idx, color='r', linestyle='--', alpha=0.5)
-            plt.xlabel('样本序号')
-            plt.ylabel('实测值')
-            plt.title('实测值按采集顺序变化')
+            plt.xlabel('sample_index')
+            plt.ylabel('measured_value')
+            plt.title('measured_value_over_time(by_collection_order)')
             plt.grid(True)
             plt.tight_layout()
             self.pdf_elements.append(self.figure_to_image(fig))
@@ -1678,14 +1653,14 @@ class SpectralAnalysisReport:
             # 归一化实测值
             normalized_measured = (measured_data['measured_value'] - measured_data['measured_value'].min()) / (measured_data['measured_value'].max() - measured_data['measured_value'].min())
             # 归一化光谱强度
-            mean_intensity = np.mean(self.dataset['光谱'], axis=1)
+            mean_intensity = np.mean(self.dataset['spectra'], axis=1)
             normalized_intensity = (mean_intensity - mean_intensity.min()) / (mean_intensity.max() - mean_intensity.min())
             # 绘制两条线
-            plt.plot(normalized_measured, 'b-', label='归一化实测值')
-            plt.plot(normalized_intensity, 'r-', label='归一化光谱强度')
-            plt.xlabel('样本序号')
-            plt.ylabel('归一化值')
-            plt.title('实测值与光谱强度的归一化对比')
+            plt.plot(normalized_measured, 'b-', label='normalized_measured_value')
+            plt.plot(normalized_intensity, 'r-', label='normalized_spectral_intensity')
+            plt.xlabel('sample_index')
+            plt.ylabel('normalized_value')
+            plt.title('normalized_comparison_between_measured_value_and_spectral_intensity')
             plt.legend()
             plt.grid(True)
             plt.tight_layout()
@@ -1704,9 +1679,9 @@ class SpectralAnalysisReport:
                 fig = plt.figure(figsize=(15, 6))
                 plt.plot(range(len(date_measured)), date_measured['measured_value'], 
                         'o-', alpha=0.5, markersize=5)
-                plt.xlabel('样本序号')
-                plt.ylabel('实测值')
-                plt.title(f'{date} 实测值变化')
+                plt.xlabel('sample_index')
+                plt.ylabel('measured_value')
+                plt.title(f'{date} measured_value_over_time')
                 plt.grid(True)
                 plt.tight_layout()
                 self.pdf_elements.append(self.figure_to_image(fig))
@@ -1718,15 +1693,15 @@ class SpectralAnalysisReport:
                 norm_measured = (date_measured['measured_value'] - date_measured['measured_value'].min()) / \
                             (date_measured['measured_value'].max() - date_measured['measured_value'].min())
                 # 归一化当天的光谱强度
-                day_intensity = np.mean(self.dataset['光谱'][date_mask], axis=1)
+                day_intensity = np.mean(self.dataset['spectra'][date_mask], axis=1)
                 norm_intensity = (day_intensity - day_intensity.min()) / \
                             (day_intensity.max() - day_intensity.min())
                 
-                plt.plot(norm_measured, 'b-', label='归一化实测值')
-                plt.plot(norm_intensity, 'r-', label='归一化光谱强度')
-                plt.xlabel('样本序号')
-                plt.ylabel('归一化值')
-                plt.title(f'{date} 实测值与光谱强度对比')
+                plt.plot(norm_measured, 'b-', label='normalized_measured_value')
+                plt.plot(norm_intensity, 'r-', label='normalized_spectral_intensity')
+                plt.xlabel('sample_index')
+                plt.ylabel('normalized_value')
+                plt.title(f'{date} normalized_comparison_between_measured_value_and_spectral_intensity')
                 plt.legend()
                 plt.grid(True)
                 plt.tight_layout()
@@ -1738,14 +1713,14 @@ class SpectralAnalysisReport:
         return daily_stats
     
     def _analyze_volunteer_patterns(self):
-        """分析志愿者模式"""
-        if '志愿者' not in self.dataset:
-            raise ValueError("数据集中缺少'志愿者'信息")
+        """analyze_volunteer_patterns"""
+        if 'volunteer' not in self.dataset:
+            raise ValueError("the_dataset_is_missing_the_information_of_volunteer")
             
         # 计算每个志愿者的平均光谱
         volunteer_means = pd.DataFrame({
-            'volunteer': self.dataset['志愿者'],
-            'mean_intensity': np.mean(self.dataset['光谱'], axis=1)
+            'volunteer': self.dataset['volunteer'],
+            'mean_intensity': np.mean(self.dataset['spectra'], axis=1)
         })
         
         # 创建志愿者统计信息
@@ -1756,9 +1731,9 @@ class SpectralAnalysisReport:
         # 绘制志愿者箱线图
         fig = plt.figure(figsize=(15, 6))
         sns.boxplot(data=volunteer_means, x='volunteer', y='mean_intensity')
-        plt.xlabel('志愿者ID')
-        plt.ylabel('平均光谱强度')
-        plt.title('各志愿者光谱强度分布')
+        plt.xlabel('volunteer_id')
+        plt.ylabel('mean_spectral_intensity')
+        plt.title('mean_spectral_intensity_distribution_of_each_volunteer')
         plt.xticks(rotation=45)
         plt.grid(True)
         plt.tight_layout()
@@ -1770,14 +1745,14 @@ class SpectralAnalysisReport:
         return volunteer_stats
     
     def _analyze_noise_levels(self):
-        """分析光谱噪声水平"""
-        if '光谱' not in self.dataset:
-            raise ValueError("数据集中缺少'光谱'数据")
+        """analyze_noise_levels"""
+        if 'spectra' not in self.dataset:
+            raise ValueError("the_dataset_is_missing_the_information_of_spectra")
             
         # 将光谱数据按照每3个一组进行分组
         n_groups = len(self.spectral_data) // 3
         if n_groups == 0:
-            self.add_paragraph("警告:样本数量少于3个,无法进行噪声分析")
+            self.add_paragraph("warning:the_number_of_samples_is_less_than_3,cannot_analyze_noise_levels")
             return
             
         X_grouped = np.array(self.spectral_data[:3*n_groups]).reshape(n_groups, 3, -1)
@@ -1790,10 +1765,10 @@ class SpectralAnalysisReport:
 
         # 绘制噪声水平图
         fig = plt.figure(figsize=(15, 6))
-        plt.plot(mean_noise_levels, 'b-', label='平均噪声水平')
-        plt.xlabel('波长点')
-        plt.ylabel('噪声水平 (标准差)')
-        plt.title('每个波长点的平均噪声水平')
+        plt.plot(mean_noise_levels, 'b-', label='mean_noise_level')
+        plt.xlabel('wavelength_index')
+        plt.ylabel('noise_level(std)')
+        plt.title('mean_noise_level_of_each_wavelength_index')
         plt.grid(True)
         plt.legend()
         plt.tight_layout()
@@ -1803,14 +1778,14 @@ class SpectralAnalysisReport:
         plt.close(fig)
         
         # 添加统计信息
-        self.add_paragraph("噪声水平分析结果：")
-        self.add_paragraph(f"平均噪声水平: {np.mean(mean_noise_levels):.4f}")
-        self.add_paragraph(f"最大噪声水平: {np.max(mean_noise_levels):.4f}")
-        self.add_paragraph(f"最小噪声水平: {np.min(mean_noise_levels):.4f}")
+        self.add_paragraph("noise_level_analysis_result:")
+        self.add_paragraph(f"mean_noise_level: {np.mean(mean_noise_levels):.4f}")
+        self.add_paragraph(f"max_noise_level: {np.max(mean_noise_levels):.4f}")
+        self.add_paragraph(f"min_noise_level: {np.min(mean_noise_levels):.4f}")
         
         # 找出噪声最大的波长点
         max_noise_idx = np.argmax(mean_noise_levels)
-        self.add_paragraph(f"噪声最大的波长点索引: {max_noise_idx}")
+        self.add_paragraph(f"the_index_of_the_wavelength_point_with_the_highest_noise: {max_noise_idx}")
         
         return mean_noise_levels
 
@@ -1821,73 +1796,23 @@ def generate_analysis_report(dataset, output_path='data_analysis_report.pdf'):
     Parameters:
     -----------
     dataset : dict
-        数据集字典
+        the_dataset_dictionary
     output_path : str, optional
-        输出PDF文件路径
+        the_path_of_the_output_PDF_file
         
     Returns:
     --------
     str or None
-        成功则返回报告路径，失败则返回None
+        the_path_of_the_report_if_success,None_if_failed
     """
     try:
         analyzer = SpectralAnalysisReport(dataset, output_path)
         analyzer.analyze_and_generate_report()
         return output_path
     except Exception as e:
-        print(f"生成报告时发生错误: {str(e)}")
-        print(f"错误发生在: {e.__traceback__.tb_frame.f_code.co_filename} 第 {e.__traceback__.tb_lineno} 行")
+        print(f"error_occurred_when_generating_the_report: {str(e)}")
+        print(f"error_occurred_at: {e.__traceback__.tb_frame.f_code.co_filename} 第 {e.__traceback__.tb_lineno} 行")
         return None
-
-def search_system_fonts():
-    """
-    搜索系统中的中文字体
-    
-    Returns:
-    --------
-    list
-        可用的中文字体文件路径列表
-    """
-    font_paths = []
-    
-    # Windows 字体路径
-    if os.name == 'nt':
-        windows_font_path = os.path.join(os.environ['SystemRoot'], 'Fonts')
-        font_files = ['msyh.ttc', 'simsun.ttc', 'simhei.ttf']
-        for font_file in font_files:
-            full_path = os.path.join(windows_font_path, font_file)
-            if os.path.exists(full_path):
-                font_paths.append(full_path)
-    
-    # Linux 字体路径
-    elif os.name == 'posix':
-        linux_font_paths = [
-            '/usr/share/fonts',
-            '/usr/local/share/fonts',
-            os.path.expanduser('~/.fonts')
-        ]
-        for path in linux_font_paths:
-            if os.path.exists(path):
-                for root, _, files in os.walk(path):
-                    for file in files:
-                        if file.endswith(('.ttc', '.ttf')):
-                            font_paths.append(os.path.join(root, file))
-    
-    # macOS 字体路径
-    elif sys.platform == 'darwin':
-        mac_font_paths = [
-            '/System/Library/Fonts',
-            '/Library/Fonts',
-            os.path.expanduser('~/Library/Fonts')
-        ]
-        for path in mac_font_paths:
-            if os.path.exists(path):
-                for root, _, files in os.walk(path):
-                    for file in files:
-                        if file.endswith(('.ttc', '.ttf')):
-                            font_paths.append(os.path.join(root, file))
-    
-    return font_paths
 
 # 使用示例
 if __name__ == "__main__":
@@ -1911,7 +1836,7 @@ if __name__ == "__main__":
         report_path = generate_analysis_report(dataset_X, output_path)
         
         if report_path:
-            print(f"报告已成功生成: {report_path}")
+            print(f"the_report_has_been_successfully_generated: {report_path}")
             
             # 尝试自动打开生成的PDF文件
             try:
@@ -1922,15 +1847,15 @@ if __name__ == "__main__":
                 else:  # Linux
                     os.system(f'xdg-open {report_path}')
             except Exception as e:
-                print(f"无法自动打开PDF文件: {str(e)}")
-                print(f"请手动打开文件: {report_path}")
+                print(f"cannot_automatically_open_the_PDF_file: {str(e)}")
+                print(f"please_open_the_file_manually: {report_path}")
         else:
-            print("报告生成失败")
+            print("the_report_generation_failed")
             
     except Exception as e:
-        print(f"程序执行过程中发生错误: {str(e)}")
+        print(f"error_occurred_during_the_program_execution: {str(e)}")
         
     finally:
         # 清理matplotlib图形
         plt.close('all')
-        print(f"程序执行时间: {(datetime.datetime.now() - now_time).total_seconds() / 60:.2f}分钟")
+        print(f"the_execution_time_of_the_program: {(datetime.datetime.now() - now_time).total_seconds() / 60:.2f}minutes")

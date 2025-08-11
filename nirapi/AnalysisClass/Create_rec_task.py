@@ -221,8 +221,6 @@ class SpectralDictionaryMapper(BaseEstimator, TransformerMixin):
         self.random_state = int(loaded['random_state'])
 
 
-
-
 class SpectrumTransformerByNN(BaseEstimator, TransformerMixin):
     class MappingDataset(Dataset):
         def __init__(self, input_data, target_data):
@@ -417,8 +415,6 @@ class SpectrumTransformerByNN(BaseEstimator, TransformerMixin):
         return output_data
     
 
-
-
 class conv_MatMul_recon(BaseEstimator,TransformerMixin):
     """直接乘以传输矩阵得到所谓的恢复光谱，然后样品除以光源光谱 
     效果似乎不好
@@ -472,11 +468,6 @@ class conv_MatMul_recon(BaseEstimator,TransformerMixin):
         # return rec_PD_sample_list*20/rec_PD_source_list
         return rec_PD_sample_list,rec_PD_source_list
 
-        
-
-
-
-    
 
 class conv_DFT_recon(BaseEstimator,TransformerMixin):
     S21_lp_nums = [1, 1, 1, 1, 1, 1]
@@ -632,8 +623,6 @@ class conv_DFT_recon(BaseEstimator,TransformerMixin):
         spectral_smooth = savgol_filter(spectral_interpolated,window_length=30,polyorder=3)
 
         return spectral_smooth
-
-
 
 
 class FermentPeelVectorReLU(BaseEstimator,TransformerMixin):

@@ -14,6 +14,11 @@ import json
 import os
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression, Ridge, Lasso
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+from sklearn.model_selection import train_test_split
+import pickle
 
 
 
@@ -27,6 +32,376 @@ class BaseClass:
     def transform(self):
         raise NotImplementedError("Subclass must implement abstract method")
         
+
+
+
+class SpectralLinearMapper(BaseEstimator, TransformerMixin):
+    """
+    基于线性回归的光谱重建映射器
+    
+    该类使用线性回归模型学习源光谱数据到目标光谱数据的映射关系，
+    支持多种线性回归模型、多项式回归和数据预处理选项。
+    
+    Parameters
+    ----------
+    model_type : str, default='ridge'
+        线性回归模型类型，可选值：
+        - 'linear': 普通线性回归
+        - 'ridge': 岭回归（L2正则化）
+        - 'lasso': 拉索回归（L1正则化）
+    degree : int, default=1
+        多项式回归的阶数。degree=1时为线性回归，degree>1时为多项式回归
+    alpha : float, default=1.0
+        正则化强度（仅适用于ridge和lasso）
+    normalize : bool, default=True
+        是否对数据进行标准化
+    fit_intercept : bool, default=True
+        是否拟合截距项
+    include_bias : bool, default=True
+        是否包含偏置项（用于多项式特征）
+    interaction_only : bool, default=False
+        是否仅生成交互项（用于多项式特征）
+    random_state : int, default=42
+        随机状态（仅适用于某些模型）
+    
+    Attributes
+    ----------
+    model_ : sklearn estimator
+        训练好的线性回归模型
+    poly_features_ : PolynomialFeatures
+        多项式特征生成器
+    scaler_X_ : StandardScaler
+        源数据的标准化器
+    scaler_y_ : StandardScaler
+        目标数据的标准化器
+    is_fitted_ : bool
+        模型是否已训练
+    """
+    
+    def __init__(self, model_type='ridge', degree=1, alpha=1.0, normalize=True, 
+                 fit_intercept=True, include_bias=True, interaction_only=False,
+                 random_state=42):
+        self.model_type = model_type
+        self.degree = degree
+        self.alpha = alpha
+        self.normalize = normalize
+        self.fit_intercept = fit_intercept
+        self.include_bias = include_bias
+        self.interaction_only = interaction_only
+        self.random_state = random_state
+        
+        # 初始化模型和预处理器
+        self._initialize_model()
+        self._initialize_preprocessors()
+        self.is_fitted_ = False
+    
+    def _initialize_model(self):
+        """初始化线性回归模型"""
+        if self.model_type == 'linear':
+            self.base_model_ = LinearRegression(fit_intercept=self.fit_intercept)
+        elif self.model_type == 'ridge':
+            self.base_model_ = Ridge(alpha=self.alpha, fit_intercept=self.fit_intercept,
+                                   random_state=self.random_state)
+        elif self.model_type == 'lasso':
+            self.base_model_ = Lasso(alpha=self.alpha, fit_intercept=self.fit_intercept,
+                                   random_state=self.random_state)
+        else:
+            raise ValueError(f"不支持的模型类型: {self.model_type}")
+    
+    def _initialize_preprocessors(self):
+        """初始化预处理器"""
+        # 多项式特征生成器
+        if self.degree > 1:
+            self.poly_features_ = PolynomialFeatures(
+                degree=self.degree, 
+                include_bias=self.include_bias,
+                interaction_only=self.interaction_only
+            )
+        else:
+            self.poly_features_ = None
+        
+        # 标准化器
+        self.scaler_X_ = StandardScaler() if self.normalize else None
+        self.scaler_y_ = StandardScaler() if self.normalize else None
+    
+    def fit(self, X_source, y_target):
+        """
+        训练光谱映射模型
+        
+        Parameters
+        ----------
+        X_source : array-like of shape (n_samples, n_features_source)
+            源光谱数据
+        y_target : array-like of shape (n_samples, n_features_target)
+            目标光谱数据
+            
+        Returns
+        -------
+        self : object
+            返回训练好的映射器实例
+        """
+        X_source = np.array(X_source)
+        y_target = np.array(y_target)
+        
+        # 数据验证
+        if X_source.shape[0] != y_target.shape[0]:
+            raise ValueError("源数据和目标数据的样本数量必须一致")
+        
+        # 特征预处理
+        X_processed = self._preprocess_features(X_source, fit=True)
+        
+        # 目标数据预处理
+        if self.normalize:
+            y_processed = self.scaler_y_.fit_transform(y_target)
+        else:
+            y_processed = y_target
+        
+        # 训练模型
+        self.base_model_.fit(X_processed, y_processed)
+        self.is_fitted_ = True
+        
+        return self
+    
+    def _preprocess_features(self, X, fit=False):
+        """
+        预处理特征数据
+        
+        Parameters
+        ----------
+        X : array-like
+            输入特征数据
+        fit : bool, default=False
+            是否拟合预处理器
+            
+        Returns
+        -------
+        X_processed : array-like
+            预处理后的特征数据
+        """
+        X_processed = X.copy()
+        
+        # 多项式特征生成
+        if self.poly_features_ is not None:
+            if fit:
+                X_processed = self.poly_features_.fit_transform(X_processed)
+            else:
+                X_processed = self.poly_features_.transform(X_processed)
+        
+        # 标准化
+        if self.scaler_X_ is not None:
+            if fit:
+                X_processed = self.scaler_X_.fit_transform(X_processed)
+            else:
+                X_processed = self.scaler_X_.transform(X_processed)
+        
+        return X_processed
+    
+    def transform(self, X_source):
+        """
+        将源光谱数据映射到目标光谱空间
+        
+        Parameters
+        ----------
+        X_source : array-like of shape (n_samples, n_features_source)
+            待映射的源光谱数据
+            
+        Returns
+        -------
+        y_mapped : array-like of shape (n_samples, n_features_target)
+            映射后的目标光谱数据
+        """
+        if not self.is_fitted_:
+            raise ValueError("模型尚未训练，请先调用fit方法")
+        
+        X_source = np.array(X_source)
+        
+        # 特征预处理
+        X_processed = self._preprocess_features(X_source, fit=False)
+        
+        # 进行预测
+        y_mapped = self.base_model_.predict(X_processed)
+        
+        # 反标准化
+        if self.normalize:
+            y_mapped = self.scaler_y_.inverse_transform(y_mapped)
+        
+        return y_mapped
+    
+    def fit_transform(self, X_source, y_target):
+        """
+        训练模型并映射数据
+        
+        Parameters
+        ----------
+        X_source : array-like of shape (n_samples, n_features_source)
+            源光谱数据
+        y_target : array-like of shape (n_samples, n_features_target)
+            目标光谱数据
+            
+        Returns
+        -------
+        y_mapped : array-like of shape (n_samples, n_features_target)
+            映射后的目标光谱数据
+        """
+        return self.fit(X_source, y_target).transform(X_source)
+    
+    def evaluate(self, X_source, y_target_true, metrics=['r2', 'mae', 'mse']):
+        """
+        评估映射模型的性能
+        
+        Parameters
+        ----------
+        X_source : array-like of shape (n_samples, n_features_source)
+            源光谱数据
+        y_target_true : array-like of shape (n_samples, n_features_target)
+            真实的目标光谱数据
+        metrics : list, default=['r2', 'mae', 'mse']
+            评估指标列表
+            
+        Returns
+        -------
+        results : dict
+            包含各项评估指标的字典
+        """
+        if not self.is_fitted_:
+            raise ValueError("模型尚未训练，请先调用fit方法")
+        
+        y_target_pred = self.transform(X_source)
+        results = {}
+        
+        for metric in metrics:
+            if metric == 'r2':
+                if y_target_true.ndim == 1:
+                    results['r2'] = r2_score(y_target_true, y_target_pred)
+                else:
+                    results['r2'] = np.mean([r2_score(y_target_true[:, i], y_target_pred[:, i]) 
+                                           for i in range(y_target_true.shape[1])])
+            elif metric == 'mae':
+                results['mae'] = mean_absolute_error(y_target_true, y_target_pred)
+            elif metric == 'mse':
+                results['mse'] = mean_squared_error(y_target_true, y_target_pred)
+            elif metric == 'rmse':
+                results['rmse'] = np.sqrt(mean_squared_error(y_target_true, y_target_pred))
+        
+        return results
+    
+    def plot_prediction_comparison(self, X_source, y_target_true, sample_idx=0, 
+                                 title="光谱重建对比", save_path=None):
+        """
+        绘制光谱重建效果对比图
+        
+        Parameters
+        ----------
+        X_source : array-like of shape (n_samples, n_features_source)
+            源光谱数据
+        y_target_true : array-like of shape (n_samples, n_features_target)
+            真实的目标光谱数据
+        sample_idx : int, default=0
+            要绘制的样本索引
+        title : str, default="光谱重建对比"
+            图表标题
+        save_path : str, optional
+            保存路径，如果提供则保存图片
+        """
+        if not self.is_fitted_:
+            raise ValueError("模型尚未训练，请先调用fit方法")
+        
+        y_target_pred = self.transform(X_source)
+        
+        plt.figure(figsize=(12, 6))
+        plt.plot(y_target_true[sample_idx], label='真实目标光谱', linewidth=2, color='blue')
+        plt.plot(y_target_pred[sample_idx], label='重建目标光谱', linewidth=2, color='red', alpha=0.7)
+        plt.xlabel('波长点')
+        plt.ylabel('强度')
+        plt.title(f'{title} - 样本 {sample_idx} (阶数: {self.degree})')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.show()
+    
+    def get_feature_importance(self):
+        """
+        获取特征重要性（仅适用于线性模型）
+        
+        Returns
+        -------
+        importance : array-like
+            特征重要性（系数的绝对值）
+        """
+        if not self.is_fitted_:
+            raise ValueError("模型尚未训练，请先调用fit方法")
+        
+        if hasattr(self.base_model_, 'coef_'):
+            return np.abs(self.base_model_.coef_)
+        else:
+            raise ValueError("该模型不支持获取特征重要性")
+    
+    def save_model(self, filepath):
+        """
+        保存训练好的模型
+        
+        Parameters
+        ----------
+        filepath : str
+            保存路径（.pkl格式）
+        """
+        if not self.is_fitted_:
+            raise ValueError("模型尚未训练，请先调用fit方法")
+        
+        model_data = {
+            'base_model': self.base_model_,
+            'poly_features': self.poly_features_,
+            'scaler_X': self.scaler_X_,
+            'scaler_y': self.scaler_y_,
+            'model_type': self.model_type,
+            'degree': self.degree,
+            'alpha': self.alpha,
+            'normalize': self.normalize,
+            'fit_intercept': self.fit_intercept,
+            'include_bias': self.include_bias,
+            'interaction_only': self.interaction_only,
+            'random_state': self.random_state,
+            'is_fitted': self.is_fitted_
+        }
+        
+        with open(filepath, 'wb') as f:
+            pickle.dump(model_data, f)
+        
+        print(f"模型已保存到: {filepath}")
+    
+    def load_model(self, filepath):
+        """
+        加载训练好的模型
+        
+        Parameters
+        ----------
+        filepath : str
+            模型文件路径
+        """
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"找不到模型文件: {filepath}")
+        
+        with open(filepath, 'rb') as f:
+            model_data = pickle.load(f)
+        
+        self.base_model_ = model_data['base_model']
+        self.poly_features_ = model_data['poly_features']
+        self.scaler_X_ = model_data['scaler_X']
+        self.scaler_y_ = model_data['scaler_y']
+        self.model_type = model_data['model_type']
+        self.degree = model_data['degree']
+        self.alpha = model_data['alpha']
+        self.normalize = model_data['normalize']
+        self.fit_intercept = model_data['fit_intercept']
+        self.include_bias = model_data.get('include_bias', True)
+        self.interaction_only = model_data.get('interaction_only', False)
+        self.random_state = model_data['random_state']
+        self.is_fitted_ = model_data['is_fitted']
+        
+        print(f"模型已从 {filepath} 加载")
+
 
 
 
@@ -48,7 +423,7 @@ class SpectralDictionaryMapper(BaseEstimator, TransformerMixin):
         Random state for reproducibility
     """
     
-    def __init__(self, n_components=100, n_nonzero_coefs=10, alpha=1, max_iter=1000, random_state=42):
+    def __init__(self, n_components=50, n_nonzero_coefs=10, alpha=1, max_iter=1000, random_state=42):
         self.n_components = n_components
         self.n_nonzero_coefs = n_nonzero_coefs
         self.alpha = alpha

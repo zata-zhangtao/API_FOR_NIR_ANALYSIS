@@ -32,6 +32,145 @@ import sys
 import random
 import warnings
 
+
+
+import numpy as np
+from abc import ABC, abstractmethod
+from typing import Dict, Any, Optional
+
+
+
+# region 数据抽象基类，用于传入
+class SpectrumDataset(ABC):
+    """
+    一个抽象基类，用于定义光谱数据集的“契约”。
+
+    它强制子类必须提供 "光谱" 和 "实测值" 数据，
+    并提供一个统一的接口 .dataset_X 来按要求返回标准的数据字典。
+
+    设计要求:
+    - 必须提供 "光谱" (n_samples, n_feats)
+    - 必须提供 "实测值" (n_samples,)
+    - 可选提供 "其他" (n_samples, n_other_feats)
+    - 最终返回一个包含这些数据的字典。
+    """
+
+    @property
+    @abstractmethod
+    def spectrum(self) -> np.ndarray:
+        """
+        (n_samples, n_feats)
+        [抽象属性] 子类必须实现这个属性，返回光谱数据。
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def measured_values(self) -> np.ndarray:
+        """
+        (n_samples,)
+        [抽象属性] 子类必须实现这个属性，返回实测值数据。
+        """
+        pass
+
+    @property
+    def other_data(self) -> Optional[np.ndarray]:
+        """
+        (n_samples, n_other_feats)
+        [具体属性] 子类可以选择性地覆盖 (override) 这个属性，返回“其他”数据。
+        
+        如果子类不提供，此方法默认返回 None。
+        """
+        return None
+
+    @property
+    def dataset_X(self) -> Dict[str, np.ndarray]:
+        """
+        【核心具体属性】
+        此属性由基类实现，自动从子类获取数据，
+        执行一致性校验，并组装成最终要求的字典结构。
+        """
+        
+        # 从子类的实现中获取数据
+        spec_data = self.spectrum
+        vals_data = self.measured_values
+        other_opt_data = self.other_data
+
+        # --- 数据一致性校验 ---
+        if not isinstance(spec_data, np.ndarray) or not isinstance(vals_data, np.ndarray):
+             raise TypeError("spectrum 和 measured_values 必须是 numpy.ndarray 类型。")
+            
+        if spec_data.ndim != 2:
+            raise ValueError(f"“光谱”数据应为2维 (n_samples, n_feats)，"
+                             f"但当前为 {spec_data.ndim} 维。")
+            
+        if vals_data.ndim != 1:
+            raise ValueError(f"“实测值”数据应为1维 (n_samples,)，"
+                             f"但当前为 {vals_data.ndim} 维。")
+            
+        n_samples = spec_data.shape[0]
+        if n_samples != vals_data.shape[0]:
+            raise ValueError(
+                f"样本数不匹配! “光谱”有 {n_samples} 个样本, "
+                f"但“实测值”有 {vals_data.shape[0]} 个样本。"
+            )
+        
+        if other_opt_data is not None:
+            if not isinstance(other_opt_data, np.ndarray):
+                raise TypeError("“其他”数据必须是 numpy.ndarray 类型或 None。")
+            if other_opt_data.shape[0] != n_samples:
+                raise ValueError(
+                    f"样本数不匹配! “光谱”有 {n_samples} 个样本, "
+                    f"但“其他”数据有 {other_opt_data.shape[0]} 个样本。"
+                )
+
+        # --- 按要求构建字典 ---
+        data_structure: Dict[str, np.ndarray] = {
+            "spectra": spec_data,
+            "measured_value": vals_data
+        }
+
+        # 只有当 '其他' 数据被提供时 (不是 None)，才将其添加到字典中
+        if other_opt_data is not None:
+            data_structure["others"] = other_opt_data
+            
+        return data_structure
+
+# -----------------------------------------------------------------
+# 用法示例：
+#
+# class MyLoader(SpectrumDataset):
+#
+#     def __init__(self, path_a, path_b):
+#         self._spec = np.load(path_a) # 假设 (100, 50)
+#         self._vals = np.load(path_b) # 假设 (100,)
+#
+#     @property
+#     def spectrum(self) -> np.ndarray:
+#         return self._spec
+#
+#     @property
+#     def measured_values(self) -> np.ndarray:
+#         return self._vals
+#
+#     # 此子类选择不提供 "other_data"，所以它会使用基类的默认实现 (返回 None)
+#
+#
+# # --- 使用 ---
+# loader = MyLoader("spec.npy", "vals.npy")
+# 
+# # 直接访问 .dataset_X 即可获得你想要的字典
+# final_dataset = loader.dataset_X 
+#
+# # final_dataset 将会是:
+# # {
+# #     "spectra": np.array(...),  (100, 50)
+# #     "measured_value": np.array(...) (100,)
+# # }
+# -----------------------------------------------------------------
+
+# endregion
+
 class SpectralAnalysisReport:
     def __init__(self, dataset, output_path='spectral_analysis_report.pdf'):
         """

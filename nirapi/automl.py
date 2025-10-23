@@ -27,7 +27,21 @@ from sklearn.model_selection import LeaveOneOut, cross_val_score
 from sklearn.pipeline import Pipeline
 from scipy.stats import pearsonr
 import joblib
-from tpot import TPOTRegressor
+TPOTRegressor = None
+
+
+def _ensure_tpot_regressor():
+    global TPOTRegressor
+    if TPOTRegressor is None:
+        try:
+            from tpot import TPOTRegressor as _TPOTRegressor
+        except ImportError as exc:
+            raise ImportError(
+                "TPOT is required for tpot_auto_tune. "
+                "Please install it with `pip install tpot`."
+            ) from exc
+        TPOTRegressor = _TPOTRegressor
+    return TPOTRegressor
 
 from . import ML_model as AF
 from .AnalysisClass.CreateTrainReport import CreateTrainReport
@@ -1306,7 +1320,8 @@ def tpot_auto_tune(X, y, generations=5, population_size=20, cv=5):
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     
     # 初始化TPOTRegressor
-    tpot = TPOTRegressor(generations=generations, population_size=population_size, cv=cv, random_state=42, verbosity=2)
+    tpot_cls = _ensure_tpot_regressor()
+    tpot = tpot_cls(generations=generations, population_size=population_size, cv=cv, random_state=42, verbosity=2)
     
     # 拟合模型
     tpot.fit(X_train, y_train)

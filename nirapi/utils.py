@@ -31,15 +31,11 @@ import optuna
 from scipy.stats import pearsonr
 
 # Import from refactored modules
-from .automl import *
-from .evaluation import *
-from .wavelength import *
-from .reconstruction import *
-from .file_utils import *
-from .draw import *
-from .ML_model import *
-from . import ML_model as AF
+from importlib import import_module
+from typing import Any
+
 from .AnalysisClass.CreateTrainReport import CreateTrainReport
+from . import ML_model as AF
 
 
 # Export all functions from sub-modules plus legacy functions in this file
@@ -79,6 +75,74 @@ __all__ = [
     'extract_function_info',
     'validate_function_parameters'
 ]
+
+_SUBMODULE_EXPORTS = {
+    'automl': {
+        'run_optuna_v5',
+        'rebuild_model_v2',
+        'run_regression_optuna_v3',
+        'tpot_auto_tune',
+    },
+    'evaluation': {
+        'PCA_LR_SVR_train_and_eval',
+        'RF_LR_SVR_train_and_eval',
+        'NO_FS_LR_SVR_train_and_eval',
+        'NO_FS_PLSR_train_and_eval',
+        'Random_FS_LR_SVR_train_and_eval',
+        'Random_FS_PLSR_train_and_eval',
+        'Random_FS_RFR_train_and_eval',
+    },
+    'wavelength': {
+        'get_MZI_bands',
+        'get_wavelength_ranges',
+        'validate_wavelength_range',
+    },
+    'reconstruction': {
+        'SpectralReconstructor',
+        'spectral_reconstruction_train',
+        'PD_reduce_noise',
+    },
+    'file_utils': {
+        'get_pythonFile_functions',
+        'extract_function_info',
+        'validate_function_parameters',
+    },
+    'ML_model': {
+        'return_inputs',
+        'mahalanobis',
+        'random_split',
+        'custom_train_test_split',
+        'mean_centering',
+        'normalization',
+        'standardization',
+        'poly_detrend',
+        'remove_baseline',
+        'snv',
+        'savgol',
+        'rnv',
+        'msc',
+        'd1',
+        'd2',
+        'move_avg',
+        'baseline_iarpls',
+        'baseline_airpls',
+        'baseline_derpsalsa',
+        'remove_high_variance_and_normalize',
+        'random_select',
+        'cars',
+        'spa',
+    },
+}
+
+
+def __getattr__(name: str) -> Any:
+    for module_name, names in _SUBMODULE_EXPORTS.items():
+        if name in names:
+            module = import_module(f'.{module_name}', __name__)
+            attr = getattr(module, name)
+            globals()[name] = attr
+            return attr
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 
@@ -2443,124 +2507,15 @@ def run_regression_optuna_v3(data_name,X = None,y=None ,data_splited = None, mod
     
     # return regressor_final,[X_train_scaled,X_test_scaled,y_train,y_test,y_pred_train,y_pred_test]
 
-def tpot_auto_tune(X, y, generations=5, population_size=20, cv=5):
-    # 划分训练集和测试集
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    
-    # 初始化TPOTRegressor
-    tpot = TPOTRegressor(generations=generations, population_size=population_size, cv=cv, random_state=42, verbosity=2)
-    
-    # 拟合模型
-    tpot.fit(X_train, y_train)
-    
-    # 评估模型
-    score = tpot.score(X_test, y_test)
-    
-    # 输出最优模型和分数
-    print("最优模型：", tpot.fitted_pipeline_)
-    print("最优分数：", score)
-    
-    # 返回最优模型
-    return tpot.fitted_pipeline_
+def tpot_auto_tune(*args, **kwargs):
+    """Wrapper that defers importing TPOT until needed."""
+    from .automl import tpot_auto_tune as _tpot_auto_tune
+
+    return _tpot_auto_tune(*args, **kwargs)
 
 
-def spectral_reconstruction_train(PD_values, Spectra_values, epochs=50, lr=1e-3,save_dir = None):
-    
-    '''
-    ------
-    parameters:
-    ------
-        PD_values: 训练数据 PD值
-        Spectra_values: 训练数据 光谱值
-        epochs: 训练轮数
-        lr: 学习率
-        save_dir: 保存模型的路径
-    '''
+def spectral_reconstruction_train(*args, **kwargs):
+    """Wrapper to defer importing torch-heavy reconstruction utilities."""
+    from .reconstruction import spectral_reconstruction_train as _spectral_reconstruction_train
 
-
-    PD_train = PD_values
-    spectrum = Spectra_values
-    pd_size = PD_train.shape[1]
-    spectrum_size = spectrum.shape[1]
-    # 设定随机种子以确保结果可复现
-
-    def same_seeds(seed):
-        torch.manual_seed(seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed(seed)
-            torch.cuda.manual_seed_all(seed)
-        np.random.seed(seed)
-        random.seed(seed)
-        torch.backends.cudnn.benchmark = False
-        torch.backends.cudnn.deterministic = True
-        np.random.seed(seed)
-    # 网络模型
- 
-    # 数据集加载方法
-    class SpectralDataset(Dataset):
-        def __init__(self, pd_size, spectrum_size):
-
-            self.pd_values = PD_train.astype(np.float32)    
-            self.spectra = spectrum.astype(np.float32)    
-
-        def __len__(self):
-            return len(self.pd_values)
-
-        def __getitem__(self, idx):
-            return self.pd_values[idx], self.spectra[idx]
-
-    # 创建数据集和数据加载器
-    dataset = SpectralDataset( pd_size=pd_size, spectrum_size=spectrum_size)
-    class SkipFirstSampler(Sampler):
-        def __init__(self, data_source):
-            self.data_source = data_source
-
-        def __iter__(self):
-            return iter(range(1, len(self.data_source)))  # 从第二个样本开始迭代
-
-        def __len__(self):
-            return len(self.data_source) 
-    sampler = SkipFirstSampler(dataset)
-    data_loader = DataLoader(dataset,sampler=sampler, batch_size=64)
-
-
-    def train(model, data_loader, epochs=50, lr=1e-3):
-        optimizer = optim.Adam(model.parameters(), lr=lr)
-        criterion = nn.MSELoss()
-
-        for epoch in range(epochs):
-            total_loss = 0
-            for pd_values, spectra in data_loader:
-                optimizer.zero_grad()
-                spectra_reconstructed = model(pd_values)
-                loss = criterion(spectra_reconstructed, spectra)
-                loss.backward()
-                optimizer.step()
-                total_loss += loss.item()
-
-            print(f'Epoch {epoch+1}, Average Loss: {total_loss / len(data_loader)}')
-
-    same_seeds(15)
-    # 模型初始化
-    model = SpectralReconstructor(pd_size=pd_size, spectrum_size=spectrum_size)
-    train(model, data_loader, epochs=50, lr=1e-3)
-    # 测试
-    model.eval()
-    dataset_test = SpectralDataset(pd_size=pd_size, spectrum_size=spectrum_size)
-    x_rec = model(torch.tensor(dataset_test[0][0], dtype=torch.float32))
-
-
-    if save_dir is not None:
-        import matplotlib.pyplot as plt
-        plt.rcParams['font.sans-serif'] = ['NotoSerifCJK-Regular']  # 用来正常显示中文标签
-        plt.plot(x_rec.detach().numpy() , label = "重建光谱")
-        plt.plot(dataset_test[0][1], label = "原始光谱")
-        plt.legend()
-        from datetime import datetime
-        now = datetime.now()
-        str = now.strftime("%Y-%m-%d_%H_%M_%S")
-        #用time模块
-        import time 
-        time_str = time.strftime("%Y-%m-%d_%H_%M_%S", time.localtime())
-        plt.savefig(save_dir+time_str+'_model.png')
-        torch.save(model, save_dir+time_str+'.pth')
+    return _spectral_reconstruction_train(*args, **kwargs)

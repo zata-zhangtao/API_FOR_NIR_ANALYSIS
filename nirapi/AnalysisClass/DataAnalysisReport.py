@@ -1,42 +1,111 @@
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
-import seaborn as sns
-from matplotlib.backends.backend_pdf import PdfPages
-import io
 import datetime
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.lib import colors
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-import matplotlib
-from sklearn.preprocessing import StandardScaler
-from sklearn.covariance import EllipticEnvelope
-from sklearn.decomposition import PCA
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
-from sklearn.cross_decomposition import PLSRegression
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.svm import SVR
-from sklearn.linear_model import LinearRegression
+import io
 import os
-matplotlib.use('Agg')
-import scipy
-import sys
 import random
+import sys
 import warnings
-
-
+from abc import ABC, abstractmethod
+from typing import Dict, Optional
 
 import numpy as np
-from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+
+pd = None
+plt = None
+sns = None
+scipy = None
+StandardScaler = None
+PCA = None
+EllipticEnvelope = None
+train_test_split = None
+r2_score = None
+mean_squared_error = None
+mean_absolute_error = None
+PLSRegression = None
+RandomForestRegressor = None
+SVR = None
+LinearRegression = None
+SimpleDocTemplate = None
+Paragraph = None
+Spacer = None
+Image = None
+Table = None
+TableStyle = None
+getSampleStyleSheet = None
+ParagraphStyle = None
+inch = None
+colors = None
+A4 = None
+
+
+def _ensure_analysis_dependencies() -> None:
+    """Lazily import heavy analysis dependencies."""
+    global pd, plt, sns, scipy, StandardScaler, PCA, EllipticEnvelope
+    global train_test_split, r2_score, mean_squared_error, mean_absolute_error
+    global PLSRegression, RandomForestRegressor, SVR, LinearRegression
+    global SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+    global getSampleStyleSheet, ParagraphStyle, inch, colors, A4
+
+    if pd is not None:
+        return
+
+    import pandas as _pd
+    import matplotlib as _matplotlib
+    _matplotlib.use('Agg')
+    import matplotlib.pyplot as _plt
+    import seaborn as _sns
+    import scipy as _scipy
+    from sklearn.preprocessing import StandardScaler as _StandardScaler
+    from sklearn.decomposition import PCA as _PCA
+    from sklearn.covariance import EllipticEnvelope as _EllipticEnvelope
+    from sklearn.model_selection import train_test_split as _train_test_split
+    from sklearn.metrics import (
+        r2_score as _r2_score,
+        mean_squared_error as _mean_squared_error,
+        mean_absolute_error as _mean_absolute_error,
+    )
+    from sklearn.cross_decomposition import PLSRegression as _PLSRegression
+    from sklearn.ensemble import RandomForestRegressor as _RandomForestRegressor
+    from sklearn.svm import SVR as _SVR
+    from sklearn.linear_model import LinearRegression as _LinearRegression
+    from reportlab.lib.pagesizes import A4 as _A4
+    from reportlab.platypus import (
+        SimpleDocTemplate as _SimpleDocTemplate,
+        Paragraph as _Paragraph,
+        Spacer as _Spacer,
+        Image as _Image,
+        Table as _Table,
+        TableStyle as _TableStyle,
+    )
+    from reportlab.lib.styles import getSampleStyleSheet as _getSampleStyleSheet, ParagraphStyle as _ParagraphStyle
+    from reportlab.lib.units import inch as _inch
+    from reportlab.lib import colors as _colors
+
+    pd = _pd
+    plt = _plt
+    sns = _sns
+    scipy = _scipy
+    StandardScaler = _StandardScaler
+    PCA = _PCA
+    EllipticEnvelope = _EllipticEnvelope
+    train_test_split = _train_test_split
+    r2_score = _r2_score
+    mean_squared_error = _mean_squared_error
+    mean_absolute_error = _mean_absolute_error
+    PLSRegression = _PLSRegression
+    RandomForestRegressor = _RandomForestRegressor
+    SVR = _SVR
+    LinearRegression = _LinearRegression
+    SimpleDocTemplate = _SimpleDocTemplate
+    Paragraph = _Paragraph
+    Spacer = _Spacer
+    Image = _Image
+    Table = _Table
+    TableStyle = _TableStyle
+    getSampleStyleSheet = _getSampleStyleSheet
+    ParagraphStyle = _ParagraphStyle
+    inch = _inch
+    colors = _colors
+    A4 = _A4
 
 
 
@@ -177,6 +246,7 @@ class SpectralAnalysisReport:
         Initialize spectral data analysis report class
         """
 
+        _ensure_analysis_dependencies()
 
         
         # Clear matplotlib font cache and set default fonts
@@ -1944,6 +2014,7 @@ def generate_analysis_report(dataset, output_path='data_analysis_report.pdf'):
     str or None
         the_path_of_the_report_if_success,None_if_failed
     """
+    _ensure_analysis_dependencies()
     try:
         analyzer = SpectralAnalysisReport(dataset, output_path)
         analyzer.analyze_and_generate_report()
